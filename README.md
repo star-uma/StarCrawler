@@ -4,9 +4,14 @@ Refactoring of the **Horu** robot control system — renamed **StarCrawler**. Mi
 
 > **v2 en desarrollo — arquitectura unificada:** todo el control (tracción CAN,
 > elevación, IMU, WiFi) pasa a un único ESP32, eliminando el Arduino MKR.
-> Dos variantes: `firmware/starcrawler_esp32/` (completa, modos 1-5 con IMU) y
-> `firmware/starcrawler_esp32_basico/` (solo tracción + elevación, sin IMU).
-> Tests en `test/` y documentación completa en
+> Tres variantes de firmware:
+> - `firmware/starcrawler_esp32/` — completa, modos 1-5 con IMU (necesita PC)
+> - `firmware/starcrawler_esp32_basico/` — tracción + elevación, sin IMU (necesita PC)
+> - `firmware/starcrawler_esp32_standalone/` — **SIN PC**: mando Xbox por
+>   Bluetooth directo al ESP32 (rama `feature/standalone-sin-pc`, ver
+>   [docs/standalone_sin_pc.md](docs/standalone_sin_pc.md))
+>
+> Tests en `test/` y documentación en
 > [docs/arquitectura_esp32_unificada.md](docs/arquitectura_esp32_unificada.md).
 > El firmware MKR de abajo queda como referencia de la arquitectura v1.
 >
