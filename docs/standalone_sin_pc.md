@@ -67,10 +67,28 @@ arduino-cli upload -p COMx --fqbn esp32-bluepad32:esp32:esp32doit-devkit-v1 firm
 - **Mando conectado pero congelado** (sin datos frescos 500 ms): misma parada.
 - Arranque en estado seguro: nada se mueve hasta que el mando conecta.
 
+## Dashboard en tiempo real
+
+El firmware emite por serie una línea `TLM,...` a 10 Hz (modo, velocidades,
+4 ángulos, bits de error). `control/StarCrawlerDashboard.py` la pinta en el
+navegador con el **robot dibujado en vivo** (las 4 orugas girando con su
+ángulo real), velocidades, errores decodificados y gráficas de 60 s:
+
+```powershell
+python control\StarCrawlerDashboard.py --serial COM7   # standalone por USB
+python control\StarCrawlerDashboard.py --udp           # firmwares WiFi (puerto 8886)
+python control\StarCrawlerDashboard.py --demo          # probarlo sin robot
+```
+
+Se abre solo en http://localhost:8000. Solo un programa puede tener el puerto
+serie abierto: cierra el Serial Monitor antes de lanzarlo con `--serial`
+(el propio dashboard hace de monitor: los eventos salen en su consola y en
+el panel "Eventos" de la web).
+
 ## Limitaciones de esta variante
 
-- Sin telemetría remota (no hay WiFi): el estado sale por el puerto serie a
-  1 Hz. Si algún día se quiere telemetría, se puede reactivar el WiFi, pero
+- Sin telemetría remota (no hay WiFi): la telemetría sale por el puerto serie
+  (USB). Si algún día se quiere por red, se puede reactivar el WiFi, pero
   ojo: WiFi y Bluetooth comparten la radio del ESP32 y compiten por ella.
 - Sin modo 5 (nivelado): no hay IMU en esta rama.
 - Los tests HIL de `test/hil/` no aplican (no hay UDP); los sketches de

@@ -37,7 +37,8 @@
  * un mando colgado que deja de refrescar.) */
 #define WATCHDOG_TIMEOUT_MS       500
 #define ENVIO_CAN_CADA_N_CICLOS   2    /* tramas de tracción a 50 Hz */
-#define ESTADO_SERIE_CADA_N_CICLOS 100 /* línea de estado por serie a 1 Hz */
+/* Línea TLM parseable por control/StarCrawlerDashboard.py, a 10 Hz */
+#define TELEMETRIA_SERIE_CADA_N_CICLOS 10
 
 /* ═══ TRACCIÓN (RMD-X8 por CAN) ═══════════════════════════════════════════ */
 

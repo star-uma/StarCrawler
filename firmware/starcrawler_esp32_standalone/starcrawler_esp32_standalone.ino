@@ -244,24 +244,25 @@ static void gestionarCambioDeModo(int16_t nuevoModo) {
   modoActivo = nuevoModo;
 }
 
-/* ─── Estado por serie (1 Hz) ────────────────────────────────────────────── */
+/* ─── Telemetría por serie (10 Hz) ───────────────────────────────────────── */
 
-static void imprimirEstado() {
-  Serial.print("[ESTADO] modo=");
-  Serial.print(modoActivo);
-  Serial.print(" mando=");
-  Serial.print(mando != nullptr ? "OK" : "NO");
-  Serial.print(" ang={");
+static uint16_t bitsDeError() {
+  uint16_t e = 0;
   for (int i = 0; i < CC_NUM_ORUGAS; i++) {
-    if (encoderOk[i]) Serial.print(angulos[i], 1);
-    else Serial.print("ERR");
-    Serial.print(i < 3 ? "," : "}");
+    if (!encoderOk[i]) e |= (1u << i);
   }
-  Serial.print(" vel={");
-  Serial.print(velIzqActual, 1);
-  Serial.print(",");
-  Serial.print(velDerActual, 1);
-  Serial.println("}");
+  if (!canOk) e |= CC_ERR_CAN;
+  if (enSeguridad) e |= CC_ERR_WATCHDOG;
+  return e;
+}
+
+/* Línea parseable por control/StarCrawlerDashboard.py (y legible a ojo):
+ * TLM,<modo>,<velIzq>,<velDer>,<angFR>,<angFL>,<angRR>,<angRL>,<errores> */
+static void emitirTelemetriaSerie() {
+  Serial.printf("TLM,%d,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%u\n",
+                (int)modoActivo, velIzqActual, velDerActual,
+                angulos[0], angulos[1], angulos[2], angulos[3],
+                (unsigned)bitsDeError());
 }
 
 /* ─── Setup ──────────────────────────────────────────────────────────────── */
@@ -350,9 +351,9 @@ void loop() {
     }
   }
 
-  /* 5. Estado por serie a 1 Hz */
-  if (contadorCiclos % ESTADO_SERIE_CADA_N_CICLOS == 0) {
-    imprimirEstado();
+  /* 5. Telemetría por serie a 10 Hz */
+  if (contadorCiclos % TELEMETRIA_SERIE_CADA_N_CICLOS == 0) {
+    emitirTelemetriaSerie();
   }
 
   /* 6. Cadencia del lazo */

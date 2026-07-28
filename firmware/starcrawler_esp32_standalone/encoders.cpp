@@ -19,6 +19,9 @@ static bool tcaSeleccionar(uint8_t canal) {
 void encoders_init() {
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(400000);
+  /* Timeout corto: con sensores desconectados (pruebas de mesa) una
+   * transaccion fallida no debe bloquear el lazo de control. */
+  Wire.setTimeOut(5);
 }
 
 bool encoders_leer(int idx, float *angDeg) {
