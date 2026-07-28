@@ -2,6 +2,22 @@
 
 Refactoring of the **Horu** robot control system — renamed **StarCrawler**. Migrates from Simulink + Arduino IDE to a fully version-controlled Python + VS Code environment.
 
+> **v2 en desarrollo — arquitectura unificada:** todo el control (tracción CAN,
+> elevación, IMU, WiFi) pasa a un único ESP32, eliminando el Arduino MKR.
+> Dos variantes: `firmware/starcrawler_esp32/` (completa, modos 1-5 con IMU) y
+> `firmware/starcrawler_esp32_basico/` (solo tracción + elevación, sin IMU).
+> Tests en `test/` y documentación completa en
+> [docs/arquitectura_esp32_unificada.md](docs/arquitectura_esp32_unificada.md).
+> El firmware MKR de abajo queda como referencia de la arquitectura v1.
+>
+> ```powershell
+> # Tests unitarios (sin hardware)
+> ./test/host/run_tests.ps1
+> # Compilar firmware unificado
+> arduino-cli lib install ACAN2515
+> arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32
+> ```
+
 ## What is StarCrawler?
 
 StarCrawler is a tracked robot with four independently articulated crawler arms. Each arm is driven by a stepper motor (elevation) and a brushless motor (traction), giving the robot the ability to traverse obstacles and self-level on uneven terrain.
