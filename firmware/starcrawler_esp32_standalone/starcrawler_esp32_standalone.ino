@@ -48,6 +48,7 @@
 static ControllerPtr mando = nullptr;
 
 static gc_EstadoControl estadoMando;
+static gc_EstadoSimultaneo estadoSim;
 static cc_DatagramaPC rx; /* datagrama sintetizado desde el mando */
 
 static uint32_t ultimoDatoMandoMs = 0;
@@ -166,6 +167,14 @@ static void leerMando(gc_EstadoMando *m) {
   /* Gatillos 0..1023: LT = brake (subir), RT = throttle (bajar) */
   m->trigIzq = mando->brake() > (int)(UMBRAL_TRIGGER * 1023);
   m->trigDer = mando->throttle() > (int)(UMBRAL_TRIGGER * 1023);
+
+  /* Botones adicionales del esquema simultáneo */
+  m->l1 = mando->l1();
+  m->l2 = mando->l2();
+  m->r2 = mando->r2();
+  m->l3 = mando->thumbL();
+  m->share = mando->miscSelect();
+  m->options = mando->miscStart();
 }
 
 /* ─── Modos de control (idénticos a la variante básica) ─────────────────── */
@@ -221,6 +230,80 @@ static void modoIncremental() {
   }
   compensarTraccion();
 }
+
+/* ─── Esquema simultáneo: tracción + orugas a la vez ─────────────────────── */
+
+/* Envía a cada RMD la velocidad de su tren MÁS la compensación de su oruga
+ * (en este esquema conducir y bascular conviven, así que se suman). */
+static void enviarTraccionCompensada() {
+  if (contadorCiclos % ENVIO_CAN_CADA_N_CICLOS != 0) return;
+
+  static const uint32_t idPorOruga[CC_NUM_ORUGAS] = {
+      CAN_ID_FR, CAN_ID_FL, CAN_ID_RR, CAN_ID_RL}; /* orden {FR,FL,RR,RL} */
+  static const float signo[CC_NUM_ORUGAS] = TABLA_SIGNO_COMPENSACION;
+  /* Tren izquierdo invertido, como siempre */
+  const float velLado[CC_NUM_ORUGAS] = {velDerActual, -velIzqActual,
+                                        velDerActual, -velIzqActual};
+  for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+    float comp = 0.0f;
+#if COMPENSACION_TRACCION
+    if (ultimoCmd[i] > 0) comp = -COMPENSACION_DPS;
+    else if (ultimoCmd[i] < 0) comp = COMPENSACION_DPS;
+    comp *= signo[i];
+#endif
+    enviarVelocidadRMD(idPorOruga[i], velLado[i] + comp);
+  }
+}
+
+static void controlSimultaneo() {
+  gc_EstadoMando m;
+  leerMando(&m);
+  gc_SalidaSimultanea sal;
+  gc_procesarSimultaneo(&estadoSim, &m, millis(), GANANCIA_JOYSTICK,
+                        VEL_MAX_DPS, &sal);
+
+  if (sal.paradaEmergencia) {
+    if (modoActivo != 0) Serial.println("[MANDO] PARADA DE EMERGENCIA (SHARE)");
+    liberarTraccion();
+    steppers_pararTodos();
+    velIzqActual = 0.0f;
+    velDerActual = 0.0f;
+    for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+      enMarcha[i] = false;
+      ultimoCmd[i] = 0;
+    }
+    modoActivo = 0;
+    return;
+  }
+  modoActivo = 6; /* 6 = esquema simultáneo (para telemetría/dashboard) */
+
+  /* Tracción con rampa, siempre activa */
+  velIzqActual = cc_rateLimiter(
+      velIzqActual, cc_saturar((float)sal.action_left_train / 100.0f, VEL_MAX_DPS),
+      RATE_LIMIT_DPS_CICLO);
+  velDerActual = cc_rateLimiter(
+      velDerActual, cc_saturar((float)sal.action_right_train / 100.0f, VEL_MAX_DPS),
+      RATE_LIMIT_DPS_CICLO);
+
+  /* Orugas: manual incremental o preset de posición */
+  for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+    int8_t cmd;
+    if (sal.usarPosicion) {
+      cmd = encoderOk[i]
+                ? cc_controlPosicion(angulos[i], (float)sal.objetivo[i],
+                                     enMarcha[i], UMBRAL_ARRANQUE_DEG,
+                                     UMBRAL_PARADA_DEG)
+                : 0; /* sin encoder no hay lazo cerrado */
+    } else {
+      cmd = sal.oruga[i];
+    }
+    aplicarComandoOruga(i, cmd);
+  }
+
+  enviarTraccionCompensada();
+}
+
+/* ─── Esquema TFG: gestión de modos ──────────────────────────────────────── */
 
 static void gestionarCambioDeModo(int16_t nuevoModo) {
   if (nuevoModo == modoActivo) return;
@@ -288,6 +371,13 @@ void setup() {
   }
 
   gc_reset(&estadoMando);
+  gc_simultaneoReset(&estadoSim);
+#if ESQUEMA_CONTROL == ESQUEMA_SIMULTANEO
+  Serial.println("[CTRL] Esquema SIMULTANEO: traccion siempre activa,");
+  Serial.println("       L1/L2 par delantero, R1/R2 trasero, SHARE = emergencia.");
+#else
+  Serial.println("[CTRL] Esquema MODOS TFG: R1 cicla 1->2->3->4->1.");
+#endif
 
   /* Bluepad32: callbacks de conexión. Las claves de emparejamiento se
    * conservan entre reinicios (no llamar a forgetBluetoothKeys salvo para
@@ -332,8 +422,12 @@ void loop() {
     if (encoderOk[i]) angulos[i] = ang;
   }
 
-  /* 4. Mando -> datagrama -> control (mismo flujo que con el PC) */
+  /* 4. Mando -> control */
   if (!enSeguridad) {
+#if ESQUEMA_CONTROL == ESQUEMA_SIMULTANEO
+    controlSimultaneo();
+#else
+    /* Esquema clásico del TFG: mando -> datagrama -> modos */
     gc_EstadoMando m;
     leerMando(&m);
     gc_procesar(&estadoMando, &m, GANANCIA_JOYSTICK, VEL_MAX_DPS, &rx);
@@ -349,6 +443,7 @@ void loop() {
         for (int i = 0; i < CC_NUM_ORUGAS; i++) ultimoCmd[i] = 0;
         break;
     }
+#endif
   }
 
   /* 5. Telemetría por serie a 10 Hz */

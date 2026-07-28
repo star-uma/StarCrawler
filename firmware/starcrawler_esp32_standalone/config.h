@@ -15,6 +15,21 @@
 #define CAN_BACKEND CAN_BACKEND_MCP2515
 #endif
 
+/* ═══ ESQUEMA DE CONTROL ══════════════════════════════════════════════════
+ * ESQUEMA_MODOS_TFG: el clásico del TFG — R1 cicla modos 1-4, la tracción
+ *   solo funciona en el modo 1.
+ * ESQUEMA_SIMULTANEO: sin modos — tracción siempre activa, orugas
+ *   superpuestas (L1/L2 par delantero, R1/R2 trasero, cruceta inclina,
+ *   ○△□✕ presets manteniendo 0.5 s, SHARE parada de emergencia,
+ *   L3 velocidad lenta/rápida).
+ */
+#define ESQUEMA_MODOS_TFG  1
+#define ESQUEMA_SIMULTANEO 2
+
+#ifndef ESQUEMA_CONTROL
+#define ESQUEMA_CONTROL ESQUEMA_SIMULTANEO
+#endif
+
 /* ═══ MANDO (sustituye a la sección RED de las otras variantes) ═══════════ */
 
 /* Ganancia del joystick: [-1,1] -> [-30,30] dps (GAIN del Python) */

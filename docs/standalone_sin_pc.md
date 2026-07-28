@@ -21,9 +21,36 @@ AHORA:  [Mando] --------------Bluetooth----------------------> [ESP32] --> motor
 | Control de motores | idéntico | idéntico (mismos módulos que la variante básica) |
 | Telemetría | UDP al PC | línea de estado por serie a 1 Hz |
 
-El mapeo del mando es el mismo del README (sticks, RB, A/B/X/Y, cruceta,
-gatillos). La lógica portada está verificada con 37 tests unitarios
-contrastados caso a caso con el Python (`test/host/test_gamepad_core.cpp`).
+## Dos esquemas de mando (seleccionable en `config.h`)
+
+`ESQUEMA_CONTROL` elige entre:
+
+**`ESQUEMA_SIMULTANEO` (por defecto)** — sin modos: conduces y basculas
+orugas a la vez, como los flippers de un robot de rescate real:
+
+| Control | Función |
+|---|---|
+| Stick izq. ↕ / der. ↔ | Velocidad / giro — **siempre activos** |
+| L1 / L2 | Par **delantero** sube / baja (mantener) |
+| R1 / R2 | Par **trasero** sube / baja (mantener) |
+| Cruceta | Inclinar el conjunto (adelante/atrás/izq/der) |
+| ✕ ○ □ △ | Presets de pose 225°/180°/135°/90° (**mantener 0.5 s**) |
+| SHARE | **Parada de emergencia** (todo liberado mientras se mantiene) |
+| L3 (clic stick izq.) | Alternar velocidad lenta (×0.5) / rápida |
+| OPTIONS | Nivelado automático (solo variante con IMU) |
+
+Los presets aplican el espejado correcto por oruga (horizontal = 180 en las
+cuatro; vertical arriba = {90,270,270,90} como documenta el TFG) — esto
+corrige de paso el bug latente del modo 2 original, que enviaba el mismo
+ángulo a las cuatro. "Subir" = el brazo se levanta del suelo. En este esquema
+la compensación de tracción se **suma** a la velocidad de conducción.
+
+**`ESQUEMA_MODOS_TFG`** — el clásico de la memoria: R1 cicla los modos
+1→2→3→4→1 y la tracción solo funciona en el modo 1 (mapeo del README).
+
+La lógica de ambos esquemas está en `gamepad_core` con 61 tests unitarios
+(`test/host/test_gamepad_core.cpp`); el esquema TFG está contrastado caso a
+caso con el Python original.
 
 ## Requisitos
 

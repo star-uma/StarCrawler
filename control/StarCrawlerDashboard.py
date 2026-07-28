@@ -287,7 +287,8 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const COLOR = [css('--s1'), css('--s2'), css('--s3'), css('--s4')];
 const NOMBRE = ['FR','FL','RR','RL'];
 const MODOS = {0:'seguridad / parado',1:'tracción',2:'posición absoluta',
-               3:'incremental ×4',4:'incremental ×2',5:'nivelado automático'};
+               3:'incremental ×4',4:'incremental ×2',5:'nivelado automático',
+               6:'simultáneo'};
 const HIST = [];                  // {t, ang[4], vl, vr}
 const VENTANA = 60;               // segundos
 
