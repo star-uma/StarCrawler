@@ -97,6 +97,12 @@ corrompe el sistema de ficheros. Reserva también un USB para el ESP32.
 **Distribución elegida: ROS 2 Jazzy Jalisco** sobre **Ubuntu 24.04 LTS**. Es
 la LTS con soporte hasta 2029; es lo que quieres en un robot que va a durar.
 
+> **Nota WSL / Ubuntu 22.04:** si desarrollas en un WSL con Ubuntu 22.04
+> (jammy), instala **ROS 2 Humble** en su lugar: mismos pasos cambiando
+> `jazzy` por `humble` y `$UBUNTU_CODENAME` resuelve a `jammy`. Todos los
+> paquetes de StarCrawler funcionan igual en ambas. Humble tiene soporte
+> hasta mayo de 2027; para el PC definitivo del robot, mejor 24.04 + Jazzy.
+
 > Los pasos exactos de instalación cambian de vez en cuando (el repositorio de
 > ROS pasó a distribuirse con un paquete `ros2-apt-source`). Si algo falla,
 > la referencia buena es <https://docs.ros.org/en/jazzy/Installation.html>.
