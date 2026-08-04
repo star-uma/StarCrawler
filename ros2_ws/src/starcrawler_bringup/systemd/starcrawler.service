@@ -1,0 +1,32 @@
+# Arranque automatico de StarCrawler al encender el PC de a bordo
+# ===============================================================
+# 1. Ajusta USUARIO y las rutas de abajo.
+# 2. sudo cp starcrawler.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now starcrawler
+# 3. Ver que hace:   journalctl -u starcrawler -f
+#    Parar:          sudo systemctl stop starcrawler
+#
+# AVISO: con esto el robot queda operativo nada mas dar tension. Habilitalo
+# solo cuando el mapeo del mando este verificado y con el robot sobre tacos.
+
+[Unit]
+Description=StarCrawler ROS 2 bringup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=USUARIO
+# El mando necesita que el usuario este en los grupos dialout e input
+SupplementaryGroups=dialout input
+Environment=ROS_DOMAIN_ID=42
+Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ExecStart=/bin/bash -c 'source /opt/ros/jazzy/setup.bash && \
+    source /home/USUARIO/StarCrawler/ros2_ws/install/setup.bash && \
+    exec ros2 launch starcrawler_bringup robot.launch.py'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

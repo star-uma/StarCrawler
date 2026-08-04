@@ -10,6 +10,11 @@ Refactoring of the **Horu** robot control system — renamed **StarCrawler**. Mi
 > [docs/arquitectura_esp32_unificada.md](docs/arquitectura_esp32_unificada.md).
 > El firmware MKR de abajo queda como referencia de la arquitectura v1.
 >
+> **v3 en esta rama — ROS 2 con PC a bordo:** workspace completo en
+> `ros2_ws/` (driver serie, teleop, URDF, launch) + firmware esclavo
+> `firmware/starcrawler_esp32_ros2/`. Instalación de ROS 2, arquitectura y
+> puesta en marcha en **[docs/ros2.md](docs/ros2.md)**.
+>
 > ```powershell
 > # Tests unitarios (sin hardware)
 > ./test/host/run_tests.ps1

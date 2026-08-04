@@ -1,0 +1,53 @@
+# Mapeo del mando para StarCrawler (esquema simultaneo).
+#
+# VERIFICAR ANTES DE USAR: los indices de /joy cambian entre mandos y drivers.
+#   ros2 run joy joy_node
+#   ros2 topic echo /joy
+# Pulsa cada boton y anota su indice; ajusta aqui. No hay que tocar codigo.
+#
+# Valores por defecto: DualShock 4 en Linux con el nodo `joy`.
+starcrawler_teleop:
+  ros__parameters:
+    # Sticks
+    eje_avance: 1              # stick izquierdo vertical
+    eje_giro: 2                # stick derecho horizontal
+    # Normalizan el eje a: avance + = stick ARRIBA, giro + = stick DERECHA.
+    # En Linux el eje Y da -1 arriba y el X da +1 a la derecha.
+    invertir_avance: true
+    invertir_giro: false
+
+    # Pares de orugas
+    boton_l1: 4                # par delantero sube
+    boton_l2: 6                # par delantero baja
+    boton_r1: 5                # par trasero sube
+    boton_r2: 7                # par trasero baja
+    eje_l2: -1                 # si L2/R2 solo son ejes, poner su indice
+    eje_r2: -1
+
+    # Otros
+    boton_l3: 11               # clic stick izq: velocidad lenta/rapida
+    boton_share: 8             # PARADA DE EMERGENCIA
+    boton_options: 9           # reservado (nivelado con IMU)
+    botones_preset: [0, 1, 3, 2]   # X, O, [], T -> -45, 0, +45, +90 deg
+    boton_enable: -1           # deadman opcional (-1 = desactivado)
+
+    # Cruceta (hat como ejes por defecto)
+    dpad_eje_x: 6
+    dpad_eje_y: 7
+    dpad_y_arriba_positivo: true
+    dpad_x_derecha_positivo: true
+    dpad_botones: []           # si en tu mando son botones: [arriba,abajo,izq,der]
+
+    # Ajustes de conduccion
+    zona_muerta: 0.08
+    umbral_eje: 0.5
+    # Topes de /cmd_vel. Coherentes con wheel_radius=0.025 y 40 dps del
+    # firmware; el driver satura de todos modos, asi que quedarse corto aqui
+    # es seguro.
+    max_lineal: 0.017          # m/s
+    max_angular: 0.087         # rad/s
+    factor_lento: 0.5
+    s_preset: 0.5              # mantener el boton para aplicar la pose
+
+    rate_hz: 50.0
+    joy_timeout_s: 0.5

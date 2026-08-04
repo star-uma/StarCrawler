@@ -1,0 +1,30 @@
+# Nombre estable para el ESP32 de StarCrawler
+# ============================================
+# Sin esto el ESP32 aparece como /dev/ttyUSB0, /dev/ttyUSB1... segun el orden
+# de enchufado. Con esto siempre es /dev/starcrawler.
+#
+# 1. Averigua el chip USB-serie de TU placa (con el ESP32 conectado):
+#
+#      udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial' | head
+#
+# 2. Descomenta la linea que corresponda (o crea la tuya con esos valores).
+# 3. Instalar:
+#
+#      sudo cp 99-starcrawler.rules /etc/udev/rules.d/
+#      sudo udevadm control --reload-rules && sudo udevadm trigger
+#      sudo usermod -aG dialout $USER      # y reiniciar sesion
+#
+# 4. Comprobar:  ls -l /dev/starcrawler
+
+# CP2102 / CP2102N (el mas comun en ESP32 DevKit V1)
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="starcrawler", MODE="0666"
+
+# CH340 / CH341
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="starcrawler", MODE="0666"
+
+# CH9102
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", SYMLINK+="starcrawler", MODE="0666"
+
+# RECOMENDADO si tienes mas de una placa con el mismo chip: distinguir por
+# numero de serie (sustituye XXXX por el que muestre el paso 1).
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="XXXX", SYMLINK+="starcrawler", MODE="0666"

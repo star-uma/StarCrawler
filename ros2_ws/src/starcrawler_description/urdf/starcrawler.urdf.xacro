@@ -1,0 +1,151 @@
+<?xml version="1.0"?>
+<!--
+  starcrawler.urdf.xacro
+  ======================
+  Modelo cinematico del robot StarCrawler: chasis + cuatro orugas basculantes.
+
+  Convencion de la articulacion de cada oruga:
+    POSITIVO = brazo LEVANTADO del suelo, 0 = oruga horizontal.
+    Es la misma convencion de starcrawler_msgs y del driver, que traduce
+    a los grados de encoder del firmware (180 deg = horizontal; las orugas
+    FL y RR van espejadas, 360-a, como documenta el TFG).
+
+  DIMENSIONES: valores iniciales APROXIMADOS. Medir en el robot y ajustar aqui
+  (todo son propiedades xacro, se cambia en un sitio).
+  Referencia: cajas envolventes de los STEP de ControlHORUFinalBoss/CAD (mm):
+      Chasis.STEP ................. 1300 x 80 x 400
+      Correa v2 (oruga) ........... 622 x 327 x 80
+      Panel exterior v3 ........... 365 x 425 x 10
+      SoporteGiroCorreaV13 ........ 780 x 167 x 181
+      Polea pasiva Oruga v9 ....... diametro 83
+      Polea Central Parte 1 ....... diametro 50
+  Son piezas sueltas y la envolvente incluye geometria auxiliar: son
+  orientativas, NO cotas. El modelo solo afecta a la visualizacion y (mas
+  adelante) al footprint de Nav2; la conversion cmd_vel <-> dps vive en
+  los parametros del driver.
+-->
+<robot name="starcrawler" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ─── Dimensiones ─────────────────────────────────────────────────── -->
+  <xacro:property name="base_length"  value="0.60"/>   <!-- X, frente-cola -->
+  <xacro:property name="base_width"   value="0.40"/>   <!-- Y, lado-lado   -->
+  <xacro:property name="base_height"  value="0.10"/>   <!-- Z             -->
+  <xacro:property name="base_mass"    value="20.0"/>   <!-- kg, aprox      -->
+
+  <xacro:property name="arm_length"   value="0.36"/>   <!-- pivote a punta -->
+  <xacro:property name="arm_width"    value="0.08"/>
+  <xacro:property name="arm_height"   value="0.09"/>
+  <xacro:property name="arm_mass"     value="3.0"/>
+
+  <!-- Altura del pivote sobre el suelo (con las orugas horizontales) -->
+  <xacro:property name="pivot_height" value="0.09"/>
+
+  <!-- Limite de recorrido: encoder 90..270 deg -> +-90 deg de elevacion -->
+  <xacro:property name="arm_limit"    value="${pi/2}"/>
+  <!-- 400 pasos/rev * reductora 1:80 = 32000 pasos/rev; a ~417 pasos/s
+       (semiperiodo 1200 us) salen ~4.7 deg/s = 0.082 rad/s -->
+  <xacro:property name="arm_max_vel"  value="0.082"/>
+  <xacro:property name="arm_effort"   value="60.0"/>
+
+  <!-- ─── Materiales ──────────────────────────────────────────────────── -->
+  <material name="sc_chasis"><color rgba="0.20 0.20 0.20 1.0"/></material>
+  <material name="sc_fr">    <color rgba="0.22 0.53 0.90 1.0"/></material>
+  <material name="sc_fl">    <color rgba="0.00 0.51 0.00 1.0"/></material>
+  <material name="sc_rr">    <color rgba="0.84 0.32 0.51 1.0"/></material>
+  <material name="sc_rl">    <color rgba="0.79 0.52 0.00 1.0"/></material>
+  <material name="sc_sensor"><color rgba="0.90 0.90 0.90 1.0"/></material>
+
+  <!-- Inercia de un prisma rectangular -->
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m*(y*y+z*z)/12.0}" ixy="0.0" ixz="0.0"
+        iyy="${m*(x*x+z*z)/12.0}" iyz="0.0"
+        izz="${m*(x*x+y*y)/12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- ─── Chasis ──────────────────────────────────────────────────────── -->
+  <!-- base_footprint: proyeccion en el suelo, raiz para Nav2 -->
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${pivot_height}"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="${base_length} ${base_width} ${base_height}"/></geometry>
+      <material name="sc_chasis"/>
+    </visual>
+    <collision>
+      <geometry><box size="${base_length} ${base_width} ${base_height}"/></geometry>
+    </collision>
+    <xacro:box_inertia m="${base_mass}" x="${base_length}" y="${base_width}" z="${base_height}"/>
+  </link>
+
+  <!-- ─── Oruga basculante ────────────────────────────────────────────────
+       x_sign: +1 delantera, -1 trasera
+       y_sign: +1 izquierda,  -1 derecha  (ROS: Y positivo a la izquierda)
+       El eje de giro se elige para que POSITIVO = brazo levantado en las
+       cuatro orugas: delanteras giran sobre -Y, traseras sobre +Y.
+  -->
+  <xacro:macro name="crawler" params="name x_sign y_sign material">
+    <joint name="${name}_joint" type="revolute">
+      <parent link="base_link"/>
+      <child  link="${name}_link"/>
+      <origin xyz="${x_sign*base_length/2} ${y_sign*(base_width/2 + arm_width/2)} 0"/>
+      <axis xyz="0 ${-x_sign} 0"/>
+      <limit lower="${-arm_limit}" upper="${arm_limit}"
+             effort="${arm_effort}" velocity="${arm_max_vel}"/>
+      <dynamics damping="0.5" friction="0.5"/>
+    </joint>
+
+    <link name="${name}_link">
+      <visual>
+        <!-- el brazo sale del pivote hacia fuera del chasis -->
+        <origin xyz="${x_sign*arm_length/2} 0 0"/>
+        <geometry><box size="${arm_length} ${arm_width} ${arm_height}"/></geometry>
+        <material name="${material}"/>
+      </visual>
+      <collision>
+        <origin xyz="${x_sign*arm_length/2} 0 0"/>
+        <geometry><box size="${arm_length} ${arm_width} ${arm_height}"/></geometry>
+      </collision>
+      <inertial>
+        <origin xyz="${x_sign*arm_length/2} 0 0"/>
+        <mass value="${arm_mass}"/>
+        <inertia
+          ixx="${arm_mass*(arm_width*arm_width+arm_height*arm_height)/12.0}" ixy="0.0" ixz="0.0"
+          iyy="${arm_mass*(arm_length*arm_length+arm_height*arm_height)/12.0}" iyz="0.0"
+          izz="${arm_mass*(arm_length*arm_length+arm_width*arm_width)/12.0}"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <xacro:crawler name="crawler_fr" x_sign="1"  y_sign="-1" material="sc_fr"/>
+  <xacro:crawler name="crawler_fl" x_sign="1"  y_sign="1"  material="sc_fl"/>
+  <xacro:crawler name="crawler_rr" x_sign="-1" y_sign="-1" material="sc_rr"/>
+  <xacro:crawler name="crawler_rl" x_sign="-1" y_sign="1"  material="sc_rl"/>
+
+  <!-- ─── Sitio para la IMU ───────────────────────────────────────────────
+       En el TFG la MPU9250 iba en el frontal del chasis. Con PC a bordo lo
+       recomendable es una IMU USB/I2C conectada al PC (imu_filter_madgwick).
+       Este frame existe para poder publicar /imu/data con frame_id correcto.
+  -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="imu_link"/>
+    <origin xyz="${base_length/2 - 0.05} 0 ${base_height/2}"/>
+  </joint>
+  <link name="imu_link">
+    <visual>
+      <geometry><box size="0.02 0.02 0.005"/></geometry>
+      <material name="sc_sensor"/>
+    </visual>
+  </link>
+
+</robot>

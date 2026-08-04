@@ -1,0 +1,32 @@
+# Parametros del driver de StarCrawler.
+#
+# CALIBRACION de wheel_radius y track_separation: solo afectan a la conversion
+# /cmd_vel <-> dps y a la odometria. La forma honesta de ajustarlos:
+#   1. track_separation: medir con cinta entre los ejes de las dos orugas.
+#   2. wheel_radius: publicar linear.x = 0.05 m/s durante 10 s y medir lo
+#      recorrido; si avanza el doble de lo esperado, el radio real es el doble.
+starcrawler_driver:
+  ros__parameters:
+    port: /dev/starcrawler        # ver udev/99-starcrawler.rules
+    baudrate: 921600
+    simulate: false
+
+    rate_hz: 100.0                # lazo del nodo
+    tx_divider: 2                 # -> 50 tramas/s al ESP32
+    cmd_timeout_s: 0.5            # sin consigna fresca -> ceros
+
+    wheel_radius: 0.025           # m  (VERIFICAR: ver cabecera)
+    track_separation: 0.40        # m  (VERIFICAR)
+    max_track_speed_dps: 40.0     # tope, igual que el firmware
+
+    joint_names:
+      - crawler_fr_joint
+      - crawler_fl_joint
+      - crawler_rr_joint
+      - crawler_rl_joint
+
+    base_frame: base_footprint
+    odom_frame: odom
+    # Odometria de orugas por velocidad de banda: el deslizamiento en giro
+    # hace que el yaw derive rapido. Activarla solo con IMU/LiDAR fusionados.
+    publish_odom: false
