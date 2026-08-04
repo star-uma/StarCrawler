@@ -151,6 +151,16 @@ def test_cruceta_como_botones():
     assert lg.procesar(ejes(), botones(12), 0.0).incremento == [1, 1, -1, -1]
 
 
+def test_cruceta_sentinela_menos_uno_equivale_a_ejes():
+    """El nodo ROS declara dpad_botones=[-1,-1,-1,-1] (rclpy no tipa listas
+    vacias): debe comportarse exactamente igual que la cruceta por ejes."""
+    m = Mapeo()
+    m.dpad_botones = (-1, -1, -1, -1)
+    lg = LogicaMando(m, Ajustes())
+    assert lg.procesar(ejes(a7=1.0), botones(), 0.0).incremento == [1, 1, -1, -1]
+    assert lg.procesar(ejes(), botones(12), 0.1).incremento == [0, 0, 0, 0]
+
+
 def test_cruceta_con_eje_y_invertido():
     m = Mapeo()
     m.dpad_y_arriba_positivo = False

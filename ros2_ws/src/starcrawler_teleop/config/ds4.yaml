@@ -36,7 +36,9 @@ starcrawler_teleop:
     dpad_eje_y: 7
     dpad_y_arriba_positivo: true
     dpad_x_derecha_positivo: true
-    dpad_botones: []           # si en tu mando son botones: [arriba,abajo,izq,der]
+    # Si en tu mando la cruceta son botones: [arriba, abajo, izq, der].
+    # [-1,-1,-1,-1] = usar los ejes (rclpy no admite lista vacia tipada).
+    dpad_botones: [-1, -1, -1, -1]
 
     # Ajustes de conduccion
     zona_muerta: 0.08

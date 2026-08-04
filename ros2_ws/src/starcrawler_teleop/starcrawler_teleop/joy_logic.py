@@ -149,7 +149,10 @@ class LogicaMando:
     def _cruceta(self, ejes: Sequence[float],
                  botones: Sequence[int]) -> tuple:
         m = self.mapeo
-        if m.dpad_botones:
+        # El modo botones se activa solo con indices validos (>= 0). Asi la
+        # lista puede venir vacia O como [-1,-1,-1,-1] (el nodo ROS usa esa
+        # forma porque rclpy no puede tipar un parametro con lista vacia).
+        if m.dpad_botones and any(b >= 0 for b in m.dpad_botones):
             b = list(m.dpad_botones) + [-1] * 4
             return (self._boton(botones, b[0]), self._boton(botones, b[1]),
                     self._boton(botones, b[2]), self._boton(botones, b[3]))

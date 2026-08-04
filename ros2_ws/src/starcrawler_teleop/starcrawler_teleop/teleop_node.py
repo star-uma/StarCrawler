@@ -44,7 +44,9 @@ class StarCrawlerTeleop(Node):
             ('dpad_eje_x', m.dpad_eje_x), ('dpad_eje_y', m.dpad_eje_y),
             ('dpad_y_arriba_positivo', m.dpad_y_arriba_positivo),
             ('dpad_x_derecha_positivo', m.dpad_x_derecha_positivo),
-            ('dpad_botones', list(m.dpad_botones)),
+            # rclpy no puede tipar una lista vacia: el sentinela [-1,-1,-1,-1]
+            # significa "cruceta por ejes" (joy_logic ignora indices < 0)
+            ('dpad_botones', [-1, -1, -1, -1]),
             ('boton_enable', m.boton_enable),
         ):
             self.declare_parameter(campo, valor)
