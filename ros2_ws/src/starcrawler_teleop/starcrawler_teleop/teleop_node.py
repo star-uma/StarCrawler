@@ -91,14 +91,20 @@ class StarCrawlerTeleop(Node):
 
     def publicar(self) -> None:
         t = self.ahora()
+
+        # Sin haber visto NUNCA un mando: silencio absoluto. Asi no competimos
+        # con ordenes manuales por topic (ros2 topic pub) ni con otros nodos.
+        if self.joy is None:
+            return
+
         vel = Twist()
         cmd = CrawlerCommand()
         cmd.header.stamp = self.get_clock().now().to_msg()
 
-        if self.joy is None or t - self.t_joy > self.joy_timeout:
-            # Sin mando: ceros explicitos. El ESP32 para igual por watchdog,
-            # esto solo evita repetir la ultima consigna.
-            if self.joy is not None and not self.aviso_dado:
+        if t - self.t_joy > self.joy_timeout:
+            # Mando perdido a mitad de uso: ceros explicitos (el ESP32 para
+            # igual por watchdog, esto solo evita repetir la ultima consigna).
+            if not self.aviso_dado:
                 self.get_logger().warn('Sin datos de /joy: enviando parada.')
                 self.aviso_dado = True
             cmd.increment = [0] * N_ORUGAS
