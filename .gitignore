@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# --- StarCrawler ---
+# El patron "target/" de la plantilla de Python (PyBuilder) tambien casaba
+# con test/target/, que son los sketches de puesta en marcha del robot y SI
+# deben versionarse. Sin esta linea git los ignora en silencio.
+!test/target/
