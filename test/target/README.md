@@ -42,9 +42,51 @@ prueban **una cosa cada vez**.
 
 ---
 
+## Preparar el PC (solo la primera vez)
+
+Si el PC está limpio, ejecuta esto desde la carpeta del repo:
+
+```powershell
+.\test\target\instalar_entorno.ps1
+```
+
+Instala `arduino-cli`, el soporte de placa del ESP32 y del Arduino MKR, y la
+librería CAN. Al terminar compila los cuatro sketches para comprobar que todo
+ha quedado bien, y te dice cuál es el siguiente paso.
+
+Tarda un rato la primera vez: el soporte del ESP32 son varios cientos de MB.
+Se puede volver a ejecutar sin problema, se salta lo que ya esté instalado.
+
+> El README principal del repo instala el soporte del Arduino MKR pero **no**
+> el del ESP32, porque es anterior a la arquitectura nueva. Por eso hace falta
+> este script: con el README principal solo se puede compilar la prueba 2.
+
+Si Windows se queja de permisos para ejecutar scripts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\test\target\instalar_entorno.ps1
+```
+
+### Si la placa no aparece
+
+Conecta la placa por USB y mira qué puerto le ha tocado:
+
+```powershell
+arduino-cli board list
+```
+
+Si no sale nada, casi siempre falta el driver USB:
+
+| Placa | Driver |
+|---|---|
+| ESP32 DevKit V1 | CP2102 (Silicon Labs) o CH340 (WCH), según el chip que lleve |
+| Arduino MKR WiFi 1010 | No necesita driver en Windows 10/11 |
+
+---
+
 ## Cómo compilar y subir
 
-Necesitas `arduino-cli` instalado (viene explicado en el README principal).
+Necesitas `arduino-cli` instalado (lo deja el script de arriba).
 
 ### Pruebas 1, 3 y 4 — ESP32
 
