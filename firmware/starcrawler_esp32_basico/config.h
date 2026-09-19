@@ -96,6 +96,18 @@
 
 #define SEMIPERIODO_STEP_US 1200  /* ~417 pasos/s, como el original */
 
+/* Rampa de aceleracion. Arrancar de golpe a la velocidad de regimen hace
+ * que el motor pierda pasos: el brazo tiene mucha inercia reflejada a
+ * traves de la reductora 1:80. Con la rampa arranca lento y acelera.
+ * El semiperiodo baja de ARRANQUE a SEMIPERIODO_STEP_US restando
+ * RAMPA_DECREMENTO_TICKS en cada pulso completo (~0.2 s con estos valores).
+ * TICK_ISR_US es el periodo base del temporizador y debe dividir a los dos
+ * semiperiodos; a 50 us la ISR corre a 20 kHz. */
+#define RAMPA_ACTIVA             1
+#define SEMIPERIODO_ARRANQUE_US  4800
+#define RAMPA_DECREMENTO_TICKS   2
+#define TICK_ISR_US              50
+
 /* Al parar: ENA+ alto = driver deshabilitado (como el original) */
 #define PARADA_LIBERA_DRIVER 1
 
