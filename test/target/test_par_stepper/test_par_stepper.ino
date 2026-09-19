@@ -3,9 +3,9 @@
  * ================================================================
  *
  *   PARA QUE SIRVE
- *   Diagnosticar por que un motor de elevacion pierde pasos y "gruñe"
- *   cuando se le mete algo de carga. Pensado para UN SOLO motor y SIN
- *   encoder: solo hace falta tu mano y una marca de referencia.
+ *   Determinar por que un motor de elevacion pierde sincronismo bajo
+ *   carga. Procedimiento para UN SOLO motor y SIN encoder: requiere
+ *   unicamente carga manual y una referencia fisica.
  *
  *   *** ESTA PRUEBA MUEVE UN MOTOR ***
  *   *** ROBOT SOBRE TACOS / BRAZO LIBRE ***
@@ -17,21 +17,21 @@
  *     - NO hace falta encoder ni multiplexor
  *
  *   LA IDEA
- *   Hay tres causas tipicas y cada prueba descarta una:
+ *   Tres causas tipicas; cada ensayo descarta una:
  *
- *     'r' PAR DE RETENCION - el motor se queda quieto y energizado, sin
- *         pulsos. Si con la mano puedes moverlo, NO es un problema de
- *         dinamica: es corriente o cableado. Es la prueba que mas
- *         informacion da y la primera que hay que hacer.
+ *     'r' PAR DE RETENCION - motor excitado en reposo, sin tren de
+ *         pulsos. Si el eje cede con carga manual, la causa no es
+ *         dinamica sino electrica. Es el ensayo discriminante y el
+ *         primero que debe ejecutarse.
  *
- *     'v' BARRIDO DE VELOCIDAD - lo mueve a varias velocidades. Si hay
- *         una velocidad donde va flojo y otras donde va fuerte, es
- *         RESONANCIA (se cura con mas micropasos). Si va flojo a todas,
- *         es corriente o cableado.
+ *     'v' BARRIDO DE VELOCIDAD - recorre varios escalones. Par adecuado
+ *         en unos e insuficiente en otros indica RESONANCIA de banda
+ *         media (se corrige aumentando la resolucion de micropaso).
+ *         Par insuficiente en todos: causa electrica.
  *
- *     'i' IDA Y VUELTA - da N pasos y los deshace. Sin pasos perdidos
- *         vuelve exactamente a la marca. Lo que se desvie son pasos
- *         perdidos. Repetible sin encoder.
+ *     'i' IDA Y VUELTA - N pasos y su reciproco. Sin perdida de pasos el
+ *         eje retorna a la referencia; la desviacion acumulada los
+ *         cuantifica. Medible sin encoder.
  *
  * ================================================================
  */
@@ -127,15 +127,15 @@ void parDeRetencion() {
   Serial.println();
   Serial.println(F("=== PRUEBA 1: PAR DE RETENCION ==="));
   Serial.println();
-  Serial.println(F("El motor se queda QUIETO y energizado, sin pulsos."));
-  Serial.println(F("Empuja el brazo con la mano e intenta moverlo."));
+  Serial.println(F("El motor queda excitado en reposo, sin pulsos."));
+  Serial.println(F("Aplica par resistente manual sobre el brazo."));
   Serial.println();
   Serial.println(F("COMO INTERPRETARLO"));
-  Serial.println(F("  - Si NO puedes moverlo (o te cuesta mucho): el motor"));
-  Serial.println(F("    tiene par. El problema es dinamico -> prueba 'v'."));
-  Serial.println(F("  - Si lo mueves con facilidad: NO le llega corriente."));
-  Serial.println(F("    Causas: DIP de corriente bajos, una fase suelta o"));
-  Serial.println(F("    mal emparejada, o la fuente no da. Mira la ayuda 'd'."));
+  Serial.println(F("  - Si el eje NO cede: hay par disponible y la causa"));
+  Serial.println(F("    es dinamica -> ensayo 'v'."));
+  Serial.println(F("  - Si el eje cede: no se esta entregando corriente."));
+  Serial.println(F("    Revisar DIP de corriente, conexionado de fases y"));
+  Serial.println(F("    capacidad de la fuente. Ver ayuda 'd'."));
   Serial.println();
   Serial.print(F("Energizando "));
   Serial.print(NOMBRE[motorElegido]);
@@ -152,7 +152,7 @@ void parDeRetencion() {
   apagarTodos();
   Serial.println(F("Listo. Motor suelto."));
   Serial.println();
-  Serial.println(F(">>> APUNTA: se podia mover con la mano?  SI / NO"));
+  Serial.println(F(">>> REGISTRAR: cede el eje con carga manual?  SI / NO"));
   Serial.println();
 }
 
@@ -162,8 +162,9 @@ void barridoVelocidad() {
   Serial.println();
   Serial.println(F("=== PRUEBA 2: BARRIDO DE VELOCIDAD ==="));
   Serial.println();
-  Serial.println(F("Va a girar a 7 velocidades, 4 s cada una."));
-  Serial.println(F("EN CADA UNA: empuja con la mano y fijate si aguanta."));
+  Serial.println(F("Recorre 7 escalones de velocidad, 4 s cada uno."));
+  Serial.println(F("En cada escalon: aplicar carga manual y observar si"));
+  Serial.println(F("mantiene el sincronismo."));
   Serial.println(F("Escribe SI para empezar."));
   if (leerLinea(60000UL) != "SI") { Serial.println(F("Cancelado.")); return; }
 
@@ -182,7 +183,7 @@ void barridoVelocidad() {
       Serial.print(F("  <-- la del firmware"));
     }
     Serial.println(F(" ---"));
-    Serial.println(F("    EMPUJA AHORA"));
+    Serial.println(F("    APLICAR CARGA MANUAL"));
 
     long pasos = (long)(4000000.0 / (2.0 * (double)semis[k]));  /* 4 segundos */
     if (pasos < 1) pasos = 1;
@@ -195,12 +196,13 @@ void barridoVelocidad() {
   Serial.println(F("FIN DEL BARRIDO."));
   Serial.println();
   Serial.println(F("COMO INTERPRETARLO"));
-  Serial.println(F("  - Fuerte a unas velocidades y flojo a otras (y gruñe"));
-  Serial.println(F("    justo en las flojas): es RESONANCIA. Solucion: subir"));
-  Serial.println(F("    micropasos en los DIP (SW5-SW8) de 400 a 1600, y"));
-  Serial.println(F("    ajustar SEMIPERIODO_STEP_US en config.h para mantener"));
-  Serial.println(F("    la misma velocidad de brazo."));
-  Serial.println(F("  - Flojo a TODAS: es corriente o cableado. Ayuda 'd'."));
+  Serial.println(F("  - Par adecuado en unos escalones e insuficiente en"));
+  Serial.println(F("    otros, con mas vibracion en los deficientes:"));
+  Serial.println(F("    RESONANCIA de banda media. Correccion: subir la"));
+  Serial.println(F("    resolucion de micropaso (SW5-SW8) de 400 a 1600 y"));
+  Serial.println(F("    reajustar SEMIPERIODO_STEP_US en config.h para"));
+  Serial.println(F("    conservar la velocidad angular del brazo."));
+  Serial.println(F("  - Par insuficiente en TODOS: causa electrica. Ayuda 'd'."));
   Serial.println();
 }
 
@@ -246,7 +248,7 @@ void ayudaDips() {
   Serial.println(F("=== DIP DEL DM542 (comprobar con el driver APAGADO) ==="));
   Serial.println();
   Serial.println(F("CORRIENTE (SW1 SW2 SW3)   pico / reposo"));
-  Serial.println(F("  ON  ON  ON   1.00 A / 0.71     <- el mas flojo"));
+  Serial.println(F("  ON  ON  ON   1.00 A / 0.71     <- minimo"));
   Serial.println(F("  OFF ON  ON   1.46 A / 1.04"));
   Serial.println(F("  ON  OFF ON   1.91 A / 1.36"));
   Serial.println(F("  OFF OFF ON   2.37 A / 1.69"));
@@ -255,8 +257,8 @@ void ayudaDips() {
   Serial.println(F("  ON  OFF OFF  3.76 A / 2.69"));
   Serial.println(F("  OFF OFF OFF  4.20 A / 3.00     <- el maximo"));
   Serial.println();
-  Serial.println(F("El motor 57HS112 es de 4.2 A: los tres en OFF."));
-  Serial.println(F("Si estan en otra posicion, estas regalando par."));
+  Serial.println(F("El 57HS112 tiene 4.2 A nominales: los tres en OFF."));
+  Serial.println(F("Cualquier otra posicion limita el par disponible."));
   Serial.println();
   Serial.println(F("SW4 - corriente en reposo"));
   Serial.println(F("  OFF = la mitad en reposo (por defecto)"));
@@ -266,16 +268,16 @@ void ayudaDips() {
   Serial.println(F("MICROPASOS (SW5-SW8): ahora deberia estar en 400/vuelta."));
   Serial.println(F("Subir a 1600 reduce muchisimo la resonancia."));
   Serial.println();
-  Serial.println(F("SI EL PAR DE RETENCION ES FLOJO, comprueba ademas:"));
+  Serial.println(F("SI EL PAR DE RETENCION ES INSUFICIENTE, verificar:"));
   Serial.println(F("  - Emparejado de fases: los 4 hilos del motor van en"));
   Serial.println(F("    DOS pares (A+/A- y B+/B-). Si se mezclan los pares,"));
-  Serial.println(F("    el motor vibra, gruñe y casi no tiene par. Con el"));
+  Serial.println(F("    el motor vibra y pierde casi todo el par. Con el"));
   Serial.println(F("    motor desconectado, mide continuidad: los dos hilos"));
   Serial.println(F("    de un mismo par dan unos pocos ohmios entre si, y"));
   Serial.println(F("    circuito abierto contra los del otro par."));
-  Serial.println(F("  - Tension: el DM542 admite 20-50 V. A mas tension,"));
-  Serial.println(F("    mas par en movimiento."));
-  Serial.println(F("  - Que la fuente de un la corriente (4.2 A por motor)."));
+  Serial.println(F("  - Tension: rango del DM542 20-50 V. A mas tension,"));
+  Serial.println(F("    mas par disponible en movimiento."));
+  Serial.println(F("  - Capacidad de la fuente: 4.2 A por motor."));
   Serial.println();
 }
 
