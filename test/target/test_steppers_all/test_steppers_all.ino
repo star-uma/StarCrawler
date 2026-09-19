@@ -56,6 +56,13 @@ const int DIR_ANGULO_SUBE[NUM_ORUGAS] = { 0, 1, 1, 0 };
  * 1200 us -> unos 417 pasos por segundo. */
 #define SEMIPERIODO_STEP_US  1200
 
+/* Rampa de aceleracion (mismos valores que firmware/.../config.h).
+ * Arrancar de golpe a la velocidad de regimen es la causa tipica de que el
+ * motor pierda pasos con una carga inercial como el brazo de la oruga.
+ * Con el comando 'r' se puede activar y desactivar para comparar. */
+#define SEMIPERIODO_ARRANQUE_US  4800
+#define RAMPA_DECREMENTO_US       100
+
 /* En el DM542: ENA en ALTO = driver deshabilitado (motor suelto).
  *              ENA en BAJO = driver habilitado (motor con par). */
 #define ENA_HABILITADO  LOW
@@ -73,6 +80,7 @@ float offsets[NUM_ORUGAS] = { -2.0f, -5.0f, 16.0f, -15.0f };
 bool armado       = false;   /* hasta que no se arma, no se mueve nada */
 int  motorElegido = 0;       /* 0=FR 1=FL 2=RR 3=RL */
 int  numPasos     = 200;     /* pasos por movimiento */
+bool conRampa     = true;    /* rampa de aceleracion (comando 'r') */
 
 /* ---- ENCODERS (igual que en la prueba 1) ----------------------- */
 
@@ -135,6 +143,8 @@ void moverMotor(int motor, int sentido, int pasos) {
   Serial.print(pasos);
   Serial.print(F(" pasos, sentido "));
   Serial.print(sentido > 0 ? F("+") : F("-"));
+  Serial.print(F(", rampa "));
+  Serial.print(conRampa ? F("SI") : F("NO"));
   Serial.println(F(")"));
 
   if (hayInicial) {
@@ -159,11 +169,18 @@ void moverMotor(int motor, int sentido, int pasos) {
   delay(10);
 
   bool cortado = false;
+  unsigned int semi = conRampa ? SEMIPERIODO_ARRANQUE_US : SEMIPERIODO_STEP_US;
   for (int p = 0; p < pasos; p++) {
     digitalWrite(PIN_STEP[motor], HIGH);
-    delayMicroseconds(SEMIPERIODO_STEP_US);
+    delayMicroseconds(semi);
     digitalWrite(PIN_STEP[motor], LOW);
-    delayMicroseconds(SEMIPERIODO_STEP_US);
+    delayMicroseconds(semi);
+
+    /* acelerar: acortar el semiperiodo hasta el de regimen */
+    if (semi > SEMIPERIODO_STEP_US) {
+      unsigned int margen = semi - SEMIPERIODO_STEP_US;
+      semi -= (margen < RAMPA_DECREMENTO_US) ? margen : RAMPA_DECREMENTO_US;
+    }
 
     if (Serial.available()) {
       while (Serial.available()) Serial.read();
@@ -238,6 +255,8 @@ void ayuda() {
   Serial.println(F("|  +   Mover el motor elegido (angulo deberia SUBIR)   |"));
   Serial.println(F("|  -   Mover el motor elegido (angulo deberia BAJAR)   |"));
   Serial.println(F("|  n   Cambiar cuantos pasos se dan por movimiento     |"));
+  Serial.println(F("|  r   Activar/desactivar la RAMPA de aceleracion      |"));
+  Serial.println(F("|      (sin rampa = como antes: arranque de golpe)     |"));
   Serial.println(F("|                                                      |"));
   Serial.println(F("|  e   Ver el angulo de las 4 orugas ahora mismo       |"));
   Serial.println(F("|  h   Mostrar esta ayuda                              |"));
@@ -399,6 +418,20 @@ void loop() {
 
     case 'n': case 'N':
       cambiarPasos();
+      break;
+
+    case 'r': case 'R':
+      conRampa = !conRampa;
+      Serial.println();
+      Serial.print(F(">>> Rampa de aceleracion: "));
+      Serial.println(conRampa ? F("ACTIVADA") : F("DESACTIVADA"));
+      if (conRampa) {
+        Serial.println(F("    Arranca a 4800 us de semiperiodo y acelera"));
+        Serial.println(F("    hasta 1200 us en unos 36 pasos."));
+      } else {
+        Serial.println(F("    Arranque de golpe a 1200 us, como antes."));
+      }
+      Serial.println();
       break;
 
     case 'e': case 'E':
