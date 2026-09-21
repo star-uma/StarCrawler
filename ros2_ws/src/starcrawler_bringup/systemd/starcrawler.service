@@ -21,10 +21,10 @@ User=USUARIO
 # El mando necesita que el usuario este en los grupos dialout e input
 SupplementaryGroups=dialout input
 Environment=ROS_DOMAIN_ID=42
-Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-ExecStart=/bin/bash -c 'source /opt/ros/jazzy/setup.bash && \
-    source /home/USUARIO/StarCrawler/ros2_ws/install/setup.bash && \
-    exec ros2 launch starcrawler_bringup robot.launch.py'
+# El script carga el entorno y detecta la distribucion de ROS instalada.
+# Se puede ejecutar a mano para probar exactamente este arranque sin
+# habilitar el servicio, que es donde salen los fallos de entorno.
+ExecStart=/home/USUARIO/StarCrawler/scripts/start_starcrawler.sh
 Restart=on-failure
 RestartSec=5
 

@@ -1,0 +1,30 @@
+# Multiplexor de fuentes de velocidad, como el de Donatello.
+#
+# Hasta ahora el teleop publicaba directamente en /cmd_vel, asi que solo
+# podia mandar una cosa a la vez y no habia forma de dar prioridad. Con
+# twist_mux cada fuente publica en su propio topico y el mux elige.
+#
+# Gana SIEMPRE la de mayor prioridad que tenga mensajes frescos. Si una
+# fuente deja de publicar durante mas de su timeout, se la ignora y pasa
+# el turno a la siguiente: el robot no se queda con la ultima orden de un
+# nodo que se ha muerto.
+#
+# La salida del mux es /cmd_vel, que es lo que consume el robot.
+
+twist_mux:
+  ros__parameters:
+    topics:
+      # Teleoperacion con el mando. Prioridad baja a proposito: cualquier
+      # cosa que se anada por encima manda sobre ella.
+      joystick:
+        topic   : cmd_vel_joy
+        timeout : 0.5
+        priority: 10
+
+      # Reservado para navegacion autonoma (Nav2). Todavia no existe: hace
+      # falta un LiDAR, que no hay. Se deja declarado para que el dia que
+      # aparezca no haya que tocar el grafo, solo publicar en el topico.
+      navigation:
+        topic   : cmd_vel_nav
+        timeout : 0.5
+        priority: 100

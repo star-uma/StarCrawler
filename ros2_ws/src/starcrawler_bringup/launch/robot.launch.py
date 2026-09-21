@@ -27,6 +27,7 @@ def generate_launch_description():
     descripcion = FindPackageShare('starcrawler_description')
     driver_share = FindPackageShare('starcrawler_driver')
     teleop_share = FindPackageShare('starcrawler_teleop')
+    odometria_share = FindPackageShare('starcrawler_odometry')
 
     args = [
         DeclareLaunchArgument(
@@ -35,6 +36,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'port', default_value='/dev/starcrawler',
             description='Puerto serie del ESP32 (ver udev/99-starcrawler.rules)'),
+        DeclareLaunchArgument(
+            'odom', default_value='true',
+            description='Publicar odometria de orugas y la TF odom->base'),
         DeclareLaunchArgument(
             'teleop', default_value='true',
             description='Arrancar el mando y la teleoperacion'),
@@ -72,6 +76,17 @@ def generate_launch_description():
             ],
             output='screen',
         ),
+        # Odometria de orugas. Separada del driver: se prueba y se
+        # sustituye sin tocarlo (ver starcrawler_odometry).
+        Node(
+            package='starcrawler_odometry',
+            executable='odometry_node',
+            name='starcrawler_odometry',
+            condition=IfCondition(LaunchConfiguration('odom')),
+            parameters=[PathJoinSubstitution(
+                [odometria_share, 'config', 'odometry.yaml'])],
+            output='screen',
+        ),
         Node(
             package='joy',
             executable='joy_node',
@@ -91,6 +106,20 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('teleop')),
             parameters=[
                 PathJoinSubstitution([teleop_share, 'config', 'ds4.yaml'])],
+            # El mando ya no manda directo: entra al mux como una fuente mas
+            remappings=[('cmd_vel', 'cmd_vel_joy')],
+            output='screen',
+        ),
+        # Multiplexor de velocidad. Elige entre las fuentes por prioridad y
+        # descarta la que se quede sin publicar (ver twist_mux.yaml).
+        Node(
+            package='twist_mux',
+            executable='twist_mux',
+            name='twist_mux',
+            condition=IfCondition(LaunchConfiguration('teleop')),
+            parameters=[
+                PathJoinSubstitution([teleop_share, 'config', 'twist_mux.yaml'])],
+            remappings=[('cmd_vel_out', 'cmd_vel')],
             output='screen',
         ),
         Node(

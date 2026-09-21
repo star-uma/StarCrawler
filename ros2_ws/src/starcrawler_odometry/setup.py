@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'starcrawler_teleop'
+package_name = 'starcrawler_odometry'
 
 setup(
     name=package_name,
@@ -10,19 +10,18 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/config',
-            ['config/ds4.yaml', 'config/twist_mux.yaml']),
+        ('share/' + package_name + '/config', ['config/odometry.yaml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Mario Garcia Jimenez',
     maintainer_email='mariogj.03@uma.es',
-    description='Teleoperacion con mando del robot StarCrawler',
+    description='Odometria de orugas de StarCrawler',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'teleop_node = starcrawler_teleop.teleop_node:main',
+            'odometry_node = starcrawler_odometry.odometry_node:main',
         ],
     },
 )

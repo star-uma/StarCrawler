@@ -1,21 +1,21 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>starcrawler_teleop</name>
+  <name>starcrawler_odometry</name>
   <version>0.1.0</version>
   <description>
-    Teleoperacion de StarCrawler con mando (esquema simultaneo): traccion
-    siempre activa mas control superpuesto de las cuatro orugas.
+    Odometria de orugas a partir de la velocidad de banda que publica el
+    ESP32. Separada del driver para poder probarla y sustituirla sin
+    tocarlo, y para dejar sitio a fusionar una IMU mas adelante.
   </description>
   <maintainer email="mariogj.03@uma.es">Mario Garcia Jimenez</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
+  <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>sensor_msgs</depend>
+  <depend>tf2_ros</depend>
   <depend>starcrawler_msgs</depend>
-  <exec_depend>joy</exec_depend>
-  <exec_depend>twist_mux</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

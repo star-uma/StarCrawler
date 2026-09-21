@@ -1,0 +1,24 @@
+# Parametros de la odometria de orugas.
+#
+# CALIBRACION: wheel_radius y track_separation vienen del CAD
+# (star-uma/SimulacionOrugas, Ejecutables/DefinicionParametros.m):
+#   radio de la polea activa = 0.15279/2 = 0.0764 m
+#   separacion lateral entre orugas = 0.524 m
+#
+# El radio EFECTIVO con la banda tensada NO es el geometrico. Para
+# afinarlo: publica linear.x = 0.05 m/s durante 10 s, mide lo recorrido y
+# corrige el radio en la misma proporcion.
+
+starcrawler_odometry:
+  ros__parameters:
+    wheel_radius: 0.0764
+    track_separation: 0.524
+
+    odom_frame: odom
+    base_frame: base_footprint
+    rate_hz: 50.0
+
+    # Con orugas el yaw deriva rapido por el deslizamiento de las bandas.
+    # Si algun dia se fusiona con IMU o LiDAR, ese filtro publicara la TF
+    # y aqui habra que poner false para no tener dos fuentes.
+    publish_tf: true
