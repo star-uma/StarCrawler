@@ -123,6 +123,11 @@ void steppers_comando(int motor, int8_t cmd) {
   if (cmd == 0) {
     motorActivo[motor] = false;
     sentidoActual[motor] = 0;
+    /* Dejar STEP en bajo: si queda en alto, la primera conmutacion del
+     * siguiente arranque es un flanco de bajada, no da paso y consume un
+     * decremento de rampa. */
+    nivelStep[motor] = false;
+    digitalWrite(pinStep[motor], LOW);
 #if PARADA_LIBERA_DRIVER
     digitalWrite(pinEna[motor], HIGH); /* driver deshabilitado (original) */
 #else
