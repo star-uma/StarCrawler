@@ -37,6 +37,9 @@ def generate_launch_description():
             'port', default_value='/dev/starcrawler',
             description='Puerto serie del ESP32 (ver udev/99-starcrawler.rules)'),
         DeclareLaunchArgument(
+            'gui', default_value='false',
+            description='Interfaz web en http://localhost:8000'),
+        DeclareLaunchArgument(
             'odom', default_value='true',
             description='Publicar odometria de orugas y la TF odom->base'),
         DeclareLaunchArgument(
@@ -120,6 +123,15 @@ def generate_launch_description():
             parameters=[
                 PathJoinSubstitution([teleop_share, 'config', 'twist_mux.yaml'])],
             remappings=[('cmd_vel_out', 'cmd_vel')],
+            output='screen',
+        ),
+        # Interfaz web. Apagada por defecto: levanta un servidor HTTP y
+        # durante el arranque automatico no siempre interesa.
+        Node(
+            package='starcrawler_gui',
+            executable='gui_node',
+            name='starcrawler_gui',
+            condition=IfCondition(LaunchConfiguration('gui')),
             output='screen',
         ),
         Node(
