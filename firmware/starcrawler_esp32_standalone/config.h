@@ -96,6 +96,15 @@
 #define TABLA_DIR_ANTIHORARIO { 1, 0, 0, 1 }
 
 #define SEMIPERIODO_STEP_US 1200
+
+/* Rampa de aceleracion: arrancar de golpe hace perder pasos (inercia del
+ * brazo reflejada a traves de la reductora 1:80). TICK_ISR_US debe dividir
+ * a los dos semiperiodos. */
+#define RAMPA_ACTIVA             1
+#define SEMIPERIODO_ARRANQUE_US  4800
+#define RAMPA_DECREMENTO_TICKS   2
+#define TICK_ISR_US              50
+
 #define PARADA_LIBERA_DRIVER 1
 
 /* ═══ ENCODERS (AS5600 tras TCA9548A) ═════════════════════════════════════ */
