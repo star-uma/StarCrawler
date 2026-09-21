@@ -162,10 +162,14 @@ $raiz = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $fallos = 0
 
 $pruebas = @(
-    @{ nombre = "test_encoders"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
-    @{ nombre = "test_steppers"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
-    @{ nombre = "test_imu";      fqbn = "esp32:esp32:esp32doit-devkit-v1" },
-    @{ nombre = "test_can_mkr";  fqbn = "arduino:samd:mkrwifi1010"        }
+    @{ nombre = "test_encoders";    fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_imu";         fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_steppers_all"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_steppers_one"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_par_stepper";  fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_can_esp32";    fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_can_mkr";      fqbn = "arduino:samd:mkrwifi1010"        },
+    @{ nombre = "test_motor_diag";   fqbn = "arduino:samd:mkrwifi1010"        }
 )
 
 foreach ($p in $pruebas) {
@@ -194,7 +198,7 @@ Titulo "Resultado"
 
 if ($fallos -eq 0) {
     Write-Host ""
-    Bien "Los 4 sketches compilan. El entorno esta listo."
+    Bien "Los 8 sketches compilan. El entorno esta listo."
     Write-Host ""
     Write-Host "  SIGUIENTE PASO: conecta la placa por USB y mira que puerto es:"
     Write-Host ""
@@ -215,7 +219,7 @@ if ($fallos -eq 0) {
     Write-Host ""
 } else {
     Write-Host ""
-    Malo "$fallos de 4 sketches no compilan."
+    Malo "$fallos de 8 sketches no compilan."
     Write-Host ""
     Write-Host "  Revisa los errores de arriba. Lo mas habitual es que falte"
     Write-Host "  algun soporte de placa: vuelve a ejecutar este script."

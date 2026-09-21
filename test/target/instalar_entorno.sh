@@ -201,10 +201,14 @@ comprobar() { # $1=nombre  $2=fqbn
   fi
 }
 
-comprobar test_encoders "esp32:esp32:esp32doit-devkit-v1"
-comprobar test_steppers "esp32:esp32:esp32doit-devkit-v1"
-comprobar test_imu      "esp32:esp32:esp32doit-devkit-v1"
-comprobar test_can_mkr  "arduino:samd:mkrwifi1010"
+comprobar test_encoders    "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_imu         "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_steppers_all "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_steppers_one "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_par_stepper  "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_can_esp32    "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_can_mkr      "arduino:samd:mkrwifi1010"
+comprobar test_motor_diag   "arduino:samd:mkrwifi1010"
 
 # ---------------------------------------------------------------------
 # Resumen
@@ -213,7 +217,7 @@ titulo "Resultado"
 
 if [ "$FALLOS" -eq 0 ]; then
   echo
-  bien "Los 4 sketches compilan. El entorno esta listo."
+  bien "Los 8 sketches compilan. El entorno esta listo."
   echo
   echo "  SIGUIENTE PASO: conecta la placa por USB y mira que puerto es:"
   echo
@@ -237,7 +241,7 @@ if [ "$FALLOS" -eq 0 ]; then
   echo
 else
   echo
-  malo "$FALLOS de 4 sketches no compilan."
+  malo "$FALLOS de 8 sketches no compilan."
   echo
   echo "  Revisa los errores de arriba. Lo mas habitual es que falte"
   echo "  algun soporte de placa: vuelve a ejecutar este script."

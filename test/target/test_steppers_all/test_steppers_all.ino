@@ -1,5 +1,5 @@
 /*
- * test_steppers.ino - StarCrawler - PRUEBA 3 de 4
+ * test_steppers_all.ino - StarCrawler - PRUEBA 4: los cuatro steppers
  * ================================================================
  *
  *   QUE PRUEBA ESTO

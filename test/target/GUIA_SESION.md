@@ -21,7 +21,7 @@ git fetch && git checkout feature/test-target-bringup
 .\test\target\instalar_entorno.ps1
 ```
 
-El script compila los cuatro sketches al terminar. Si algo falla, que falle
+El script compila todos los sketches al terminar. Si algo falla, que falle
 aquí y no con el robot delante.
 
 Para saber en qué puerto está cada placa:
@@ -104,7 +104,7 @@ Mismo sketch, comando `m`. Un ID cada vez, 5 °/s durante 2 s, para solo.
 ## Paso 5 — Steppers · ESP32 · robot SOBRE TACOS
 
 ```powershell
-arduino-cli upload -p COMx --fqbn esp32:esp32:esp32doit-devkit-v1 test\target\test_steppers
+arduino-cli upload -p COMx --fqbn esp32:esp32:esp32doit-devkit-v1 test\target\test_steppers_all
 ```
 
 `a` para armar → `1`..`4` para elegir motor → `+` y `-` para moverlo.
