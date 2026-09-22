@@ -24,14 +24,41 @@ import sys
 import time
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+# Sin ventana con foco, SDL no actualiza el mando si no se le pide
+os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
 import pygame  # noqa: E402
 
-# Orden crudo del DualShock 4 en Windows con pygame 2 (SDL2 + HIDAPI).
-# Comprobado con --probar; si tu mando difiere, ajusta aqui.
-EJES_WIN = {"LX": 0, "LY": 1, "RX": 2, "RY": 3, "L2": 4, "R2": 5}
-BOTONES_WIN = {"X": 0, "O": 1, "[]": 2, "T": 3, "share": 4, "PS": 5,
-               "options": 6, "L3": 7, "R3": 8, "L1": 9, "R1": 10,
-               "arriba": 11, "abajo": 12, "izq": 13, "der": 14}
+# Orden crudo del DualShock 4 en Windows con pygame 2. SDL puede abrirlo de
+# dos maneras y el orden cambia; se elige por lo que anuncia el mando:
+#   HIDAPI      "PS4 Controller",      6 ejes, 16 botones, 0 hats (cruceta = botones)
+#   DirectInput "Wireless Controller", 6 ejes, 14 botones, 1 hat  (cruceta = hat)
+# Comprobado con --probar; si tu mando difiere, ajusta la tabla.
+DISPOSICIONES = {
+    "hidapi": {
+        "ejes": {"LX": 0, "LY": 1, "RX": 2, "RY": 3, "L2": 4, "R2": 5},
+        "botones": {"X": 0, "O": 1, "[]": 2, "T": 3, "share": 4, "PS": 5,
+                    "options": 6, "L3": 7, "R3": 8, "L1": 9, "R1": 10,
+                    "arriba": 11, "abajo": 12, "izq": 13, "der": 14},
+    },
+    "directinput": {
+        "ejes": {"LX": 0, "LY": 1, "RX": 2, "L2": 3, "R2": 4, "RY": 5},
+        "botones": {"[]": 0, "X": 1, "O": 2, "T": 3, "L1": 4, "R1": 5,
+                    "L2": 6, "R2": 7, "share": 8, "options": 9, "L3": 10,
+                    "R3": 11, "PS": 12},
+    },
+}
+EJES_WIN = DISPOSICIONES["hidapi"]["ejes"]
+BOTONES_WIN = DISPOSICIONES["hidapi"]["botones"]
+
+
+def elegir_disposicion(mando):
+    global EJES_WIN, BOTONES_WIN
+    nombre = "directinput" if (mando.get_numhats() >= 1
+                               or mando.get_numbuttons() <= 14) else "hidapi"
+    EJES_WIN = DISPOSICIONES[nombre]["ejes"]
+    BOTONES_WIN = DISPOSICIONES[nombre]["botones"]
+    return nombre
+
 
 FRECUENCIA_HZ = 50
 
@@ -52,9 +79,9 @@ def abrir_mando():
                  "o conectalo por USB y vuelve a lanzar.")
     mando = pygame.joystick.Joystick(0)
     mando.init()
-    print("Mando: %s | ejes %d | botones %d | hats %d"
+    print("Mando: %s | ejes %d | botones %d | hats %d | disposicion %s"
           % (mando.get_name(), mando.get_numaxes(), mando.get_numbuttons(),
-             mando.get_numhats()))
+             mando.get_numhats(), elegir_disposicion(mando)))
     return mando
 
 
@@ -83,14 +110,17 @@ def leer(mando):
     if mando.get_numhats() > 0:
         hx, hy = mando.get_hat(0)          # hx: +1 derecha; hy: +1 arriba
         dpad_x, dpad_y = -float(hx), float(hy)
-    else:
+    elif "arriba" in BOTONES_WIN:
         dpad_x = float(b("izq") - b("der"))
         dpad_y = float(b("arriba") - b("abajo"))
+    else:
+        dpad_x = dpad_y = 0.0
 
     ejes = [-a("LX"), -a("LY"), -a("L2"), -a("RX"), -a("RY"), -a("R2"),
             dpad_x, dpad_y]
     botones = [b("X"), b("O"), b("T"), b("[]"), b("L1"), b("R1"),
-               1 if a("L2") > 0.0 else 0, 1 if a("R2") > 0.0 else 0,
+               b("L2") if "L2" in BOTONES_WIN else (1 if a("L2") > 0.0 else 0),
+               b("R2") if "R2" in BOTONES_WIN else (1 if a("R2") > 0.0 else 0),
                b("share"), b("options"), b("PS"), b("L3"), b("R3")]
     return [round(v, 3) for v in ejes], botones
 
