@@ -27,45 +27,55 @@ Refactoring of the **Horu** robot control system — renamed **StarCrawler**. Mi
 
 StarCrawler is a tracked robot with four independently articulated crawler arms. Each arm is driven by a stepper motor (elevation) and a brushless motor (traction), giving the robot the ability to traverse obstacles and self-level on uneven terrain.
 
-## Repository structure
+## Estructura del repositorio
 
 ```
 StarCrawler/
-├── .vscode/
-│   └── arduino.json                          # VS Code Arduino configuration
-├── control/
-│   └── StarCrawlerXbox.py                    # PC controller — reads Xbox gamepad, sends UDP
 ├── firmware/
-│   └── starcrawler_mkr_traccion/
-│       └── starcrawler_mkr_traccion.ino      # Arduino MKR WiFi 1010 firmware
-└── docs/
-    └── TFG_GIEI_Mario_Garcia_Jimenez_O1JUN_25.pdf
+│   ├── starcrawler_esp32/          ESP32 unificado, modos 1-5 con IMU
+│   ├── starcrawler_esp32_basico/   igual pero sin IMU
+│   ├── starcrawler_esp32_ros2/     esclavo de ROS 2 (serie con CRC16)
+│   └── starcrawler_mkr_traccion/   arquitectura v1, solo referencia
+├── micro_ros_esp32_apps/
+│   └── starcrawler_app/            el ESP32 como nodo ROS 2 nativo
+├── ros2_ws/src/                    nueve paquetes: driver, sim, teleop,
+│                                   odometria, gui, descripcion, msgs,
+│                                   comun y bringup
+├── test/
+│   ├── target/                     puesta en marcha con el robot delante
+│   ├── host/                       tests de logica pura, sin hardware
+│   └── hil/                        sistema completo por UDP
+├── scripts/                        instalacion y arranque del PC de a bordo
+└── docs/                           arquitectura, ROS 2, cadena de elevacion
 ```
 
-## System architecture
+## Arquitectura
 
 ```
-[PC — StarCrawlerXbox.py]
-        |
-        |  UDP (18 bytes, 9 × int16 LE) @ 50 pkt/s
-        |  WiFi "Horu" — 192.168.10.101:8885
-        ▼
-[Arduino MKR WiFi 1010]
-        |
-        |  CAN bus @ 1 Mbps
-        ▼
-[RMD-X8 traction motors]  FL(0x141)  FR(0x142)  RR(0x143)  RL(0x144)
-        |
-        |  UART
-        ▼
-[ESP32]
-        |
-        |  I2C (TCA9548A mux + AS5600 encoders)
-        ▼
-[DM542 stepper drivers — elevation motors]
+        [Mando] ──► PC a bordo (Ubuntu + ROS 2)
+                         │  USB serie
+                         ▼
+                    [ESP32 unico]
+                    ├── CAN 1 Mbps ──► 4x RMD-X8      traccion
+                    ├── GPIO x12 ────► 4x DM542       elevacion
+                    └── I2C ─────────► TCA9548A + 4x AS5600  encoders
+                                       MPU9250 (IMU)
 ```
 
-## UDP datagram format
+Un solo microcontrolador para todo. El Arduino MKR de la v1 se elimina: solo
+aportaba WiFi (que el ESP32 ya tiene), el bus CAN (que cubre el TWAI interno) y
+la IMU (que se recablea).
+
+**El detalle de cada cosa está en `docs/`:**
+
+| Documento | De qué va |
+|---|---|
+| [`docs/ros2.md`](docs/ros2.md) | Arquitectura ROS 2, instalación y puesta en marcha |
+| [`docs/arquitectura_esp32_unificada.md`](docs/arquitectura_esp32_unificada.md) | Por qué cabe todo en un ESP32 y qué cambia del cableado |
+| [`docs/cadena_de_elevacion.md`](docs/cadena_de_elevacion.md) | De dónde sale cada constante de los steppers |
+| [`test/target/README.md`](test/target/README.md) | Cómo probar cada componente por separado |
+
+## Protocolo UDP de la v1 (referencia)
 
 | Index | Field | Description |
 |---|---|---|
@@ -86,7 +96,7 @@ StarCrawler/
 | 4 | Incremental × 2 | Control crawler pairs independently via D-pad + triggers |
 | 5 | Auto-levelling | IMU-based automatic horizontal levelling (hold Start) |
 
-## Xbox controller mapping
+## Mando en la v1 (referencia)
 
 | Input | Action |
 |---|---|
@@ -151,20 +161,36 @@ Verify:
 arduino-cli version
 ```
 
-### 3. Arduino boards and libraries
+### 3. Placas y librerias
+
+**Lo mas rapido es el script**, que instala lo necesario y comprueba al final
+que todos los sketches compilan:
 
 ```powershell
+./test/target/instalar_entorno.ps1
+```
+
+A mano seria:
+
+```powershell
+arduino-cli config add board_manager.additional_urls `
+  https://espressif.github.io/arduino-esp32/package_esp32_index.json
 arduino-cli core update-index
-arduino-cli core install arduino:samd
-arduino-cli lib install "WiFiNINA"
+arduino-cli core install esp32:esp32      # firmware actual
+arduino-cli core install arduino:samd     # solo para el MKR de la v1
+arduino-cli lib install "ACAN2515"
 arduino-cli lib install "CAN"
 ```
 
-Verify board is detected (connect Arduino via USB first):
+> El firmware **standalone** necesita ademas otro board package, porque
+> Bluepad32 sustituye la pila Bluetooth. Esta en
+> [`docs/standalone_sin_pc.md`](docs/standalone_sin_pc.md).
+
+Comprueba que se detecta la placa (conectala por USB primero):
+
 ```powershell
 arduino-cli board list
 ```
-Expected output: Arduino MKR WiFi 1010 on COM3.
 
 ### 4. SSH key for GitHub
 
@@ -195,31 +221,44 @@ git clone -b main git@github.com:star-uma/StarCrawler.git
 
 ---
 
-## Running
+## Como se arranca
 
-### PC controller
+### Con ROS 2 (esta rama)
+
+Todo el detalle esta en [`docs/ros2.md`](docs/ros2.md). En corto:
+
+```bash
+# sin nada de hardware
+ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true gui:=true
+
+# con el robot
+ros2 launch starcrawler_bringup robot.launch.py
+```
+
+### Compilar y flashear el ESP32
+
+```powershell
+arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32_ros2
+arduino-cli upload -p COMx --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32_ros2
+```
+
+Cambia `starcrawler_esp32_ros2` por la variante que toque: `starcrawler_esp32`
+(completa, con IMU) o `starcrawler_esp32_basico` (sin IMU).
+
+### Probar componentes por separado
+
+Antes de flashear el firmware completo a un robot recien montado, conviene
+verificar cada subsistema. Esta todo en
+[`test/target/`](test/target/README.md).
+
+### El control por PC de la v1
 
 ```powershell
 cd control
-python StarCrawlerXbox.py
-```
-
-Test mode (verify gamepad axes without sending to robot):
-```powershell
 python StarCrawlerXbox.py --test
 ```
 
-### Compile firmware
-
-```powershell
-arduino-cli compile --fqbn arduino:samd:mkrwifi1010 "firmware/starcrawler_mkr_traccion/starcrawler_mkr_traccion.ino"
-```
-
-### Flash firmware
-
-```powershell
-arduino-cli upload -p COM3 --fqbn arduino:samd:mkrwifi1010 "firmware/starcrawler_mkr_traccion/starcrawler_mkr_traccion.ino"
-```
+Manda datagramas UDP al firmware de la v1. Se mantiene como referencia.
 
 ---
 
