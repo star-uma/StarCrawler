@@ -24,6 +24,7 @@
   <exec_depend>starcrawler_teleop</exec_depend>
   <exec_depend>starcrawler_odometry</exec_depend>
   <exec_depend>starcrawler_gui</exec_depend>
+  <exec_depend>starcrawler_sim</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

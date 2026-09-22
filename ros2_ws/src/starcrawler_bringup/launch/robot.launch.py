@@ -15,7 +15,7 @@ Uso:
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import (Command, LaunchConfiguration,
                                   PathJoinSubstitution)
 from launch_ros.actions import Node
@@ -28,6 +28,7 @@ def generate_launch_description():
     driver_share = FindPackageShare('starcrawler_driver')
     teleop_share = FindPackageShare('starcrawler_teleop')
     odometria_share = FindPackageShare('starcrawler_odometry')
+    sim_share = FindPackageShare('starcrawler_sim')
 
     args = [
         DeclareLaunchArgument(
@@ -36,6 +37,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'port', default_value='/dev/starcrawler',
             description='Puerto serie del ESP32 (ver udev/99-starcrawler.rules)'),
+        DeclareLaunchArgument(
+            'sim', default_value='false',
+            description='Robot simulado a nivel de topicos, sin hardware ni '
+                        'protocolo serie. Sustituye al driver por completo'),
         DeclareLaunchArgument(
             'gui', default_value='false',
             description='Interfaz web en http://localhost:8000'),
@@ -68,15 +73,30 @@ def generate_launch_description():
             parameters=[{'robot_description': robot_description}],
             output='screen',
         ),
+        # El driver habla con el ESP32 real (o con su simulador de puerto
+        # serie). Con sim:=true no pinta nada: el nodo de abajo publica el
+        # estado directamente.
         Node(
             package='starcrawler_driver',
             executable='driver_node',
             name='starcrawler_driver',
+            condition=UnlessCondition(LaunchConfiguration('sim')),
             parameters=[
                 PathJoinSubstitution([driver_share, 'config', 'driver.yaml']),
                 {'simulate': ParameterValue(simulate, value_type=bool),
                  'port': ParameterValue(port, value_type=str)},
             ],
+            output='screen',
+        ),
+        # Robot simulado: habla los mismos topicos que hablara el ESP32
+        # con micro-ROS, asi que el resto del grafo no lo distingue.
+        Node(
+            package='starcrawler_sim',
+            executable='sim_node',
+            name='starcrawler_sim',
+            condition=IfCondition(LaunchConfiguration('sim')),
+            parameters=[PathJoinSubstitution(
+                [sim_share, 'config', 'sim.yaml'])],
             output='screen',
         ),
         # Odometria de orugas. Separada del driver: se prueba y se

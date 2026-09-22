@@ -1,0 +1,16 @@
+# Parametros del robot simulado.
+#
+# Geometria: los mismos valores que la odometria y el firmware, para que
+# el lazo cerrado cuadre. Vienen del CAD (SimulacionOrugas).
+
+starcrawler_sim:
+  ros__parameters:
+    wheel_radius: 0.0764
+    track_separation: 0.524
+    rate_hz: 50.0
+
+    # Simulacion de averias. Con estos en false se puede comprobar como se
+    # comporta el resto del grafo con el robot degradado, sin tener que
+    # desconectar nada de verdad.
+    encoders_ok: true
+    can_ok: true
