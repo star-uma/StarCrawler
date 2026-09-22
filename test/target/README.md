@@ -200,6 +200,15 @@ que separa las tres causas típicas. El firmware ya lleva rampa de aceleración
 (`RAMPA_ACTIVA` en `config.h`): `test_steppers_all` tiene el comando `r` para
 compararlo con y sin ella.
 
+**El motor gira siempre hacia el mismo lado, con `+` y con `-`.**
+Es un problema de cableado, no del sketch. Los pines `PUL+`, `DIR+` y `ENA+`
+del DM542 tienen que ir a **3,3 V**, no a 5 V: las entradas son
+optoacopladores, y con 5 V el nivel alto del ESP32 deja 1,7 V sobre el opto,
+que no llega a apagarlo. El driver ve DIR siempre activado.
+Para confirmarlo sin mover el motor, usa el comando `d` de
+`test_steppers_one` y mide entre `DIR+` y `DIR-`: si en estado alto marca
+~1,7 V en vez de ~0 V, es esto.
+
 **Un stepper gira al revés.**
 Es normal y es justo lo que la prueba busca. El sketch te dice qué valor hay
 que invertir en `config.h`.

@@ -10,7 +10,9 @@ está en [README.md](README.md); esto es el resumen para tener al lado.
 1. **Robot sobre tacos** antes de cualquier cosa que se mueva (pasos 4 y 5).
 2. **Nunca dos placas mandando en el bus CAN.** Si usas el MKR, el ESP32 no
    puede estar transmitiendo por CAN — desconéctalo del bus o no lo alimentes.
-3. **Un "no responde" es un resultado**, no un fracaso. Apúntalo igual.
+3. **Los pines `+` del DM542 a 3,3 V**, nunca a 5 V. Con 5 V el driver no
+   ve el cambio de DIR y el motor gira siempre hacia el mismo lado.
+4. **Un "no responde" es un resultado**, no un fracaso. Apúntalo igual.
 
 ---
 

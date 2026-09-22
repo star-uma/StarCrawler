@@ -14,7 +14,15 @@
  *     STEP (PUL-) -> GPIO 25
  *     DIR  (DIR-) -> GPIO 33
  *     ENA  (ENA-) -> GPIO 4
- *     PUL+ / DIR+ / ENA+ del DM542 -> +5V comun con GND del ESP32
+ *     PUL+ / DIR+ / ENA+ del DM542 -> +3.3V  (NO a 5V, ver abajo)
+ *
+ *   *** OJO CON LOS 3.3V ***
+ *   Las entradas del DM542 son optoacopladores. Si los pines "+" van a
+ *   5V y el ESP32 (3.3V) pone la senal en ALTO, quedan 1.7V sobre el
+ *   opto: no se apaga, y el driver ve la senal siempre activada.
+ *   Con DIR eso significa que el motor gira SIEMPRE HACIA EL MISMO LADO,
+ *   aunque el sketch diga que cambia de sentido. Con los "+" a 3.3V el
+ *   nivel ALTO deja 0V sobre el opto y apaga de verdad.
  *
  *   COMO SE USA
  *     1. Compila y sube este sketch
@@ -31,8 +39,17 @@
 #define PIN_ENA    4
 
 /* Medio periodo del pulso STEP, en microsegundos.
- * 1200 us -> unos 417 pasos por segundo. */
+ * 2000 us -> unos 250 pasos por segundo. Con la reductora 1:80 eso son
+ * ~2.8 grados/s en el brazo: se mueve despacio y hay que mirar con
+ * calma para verlo. */
 #define SEMIPERIODO_STEP_US  2000
+
+/* Rampa de aceleracion (mismos valores que test_steppers_all).
+ * Arrancar de golpe a la velocidad de regimen es la causa tipica de que
+ * el motor pierda pasos con la inercia del brazo. Con 'r' se activa y
+ * desactiva para comparar el mismo motor con y sin ella. */
+#define SEMIPERIODO_ARRANQUE_US  4800
+#define RAMPA_DECREMENTO_US       100
 
 /* En el DM542: ENA en ALTO = driver deshabilitado (motor suelto).
  *              ENA en BAJO = driver habilitado (motor con par). */
@@ -42,6 +59,7 @@
 /* ---- ESTADO ------------------------------------------------------ */
 bool armado    = false;   /* hasta que no se arma, no se mueve nada */
 int  numPasos  = 20000;     /* pasos por movimiento */
+bool conRampa  = true;      /* rampa de aceleracion (comando 'r') */
 
 /* ---- MOTOR --------------------------------------------------------- */
 
@@ -85,11 +103,18 @@ void moverMotor(int sentido, int pasos) {
   delay(10);
 
   bool cortado = false;
+  unsigned int semi = conRampa ? SEMIPERIODO_ARRANQUE_US : SEMIPERIODO_STEP_US;
   for (int p = 0; p < pasos; p++) {
     digitalWrite(PIN_STEP, HIGH);
-    delayMicroseconds(SEMIPERIODO_STEP_US);
+    delayMicroseconds(semi);
     digitalWrite(PIN_STEP, LOW);
-    delayMicroseconds(SEMIPERIODO_STEP_US);
+    delayMicroseconds(semi);
+
+    /* acelerar: acortar el semiperiodo hasta el de regimen */
+    if (semi > SEMIPERIODO_STEP_US) {
+      unsigned int margen = semi - SEMIPERIODO_STEP_US;
+      semi -= (margen < RAMPA_DECREMENTO_US) ? margen : RAMPA_DECREMENTO_US;
+    }
 
     if (Serial.available()) {
       while (Serial.available()) Serial.read();
@@ -108,6 +133,44 @@ void moverMotor(int sentido, int pasos) {
 
 /* ---- COMANDOS -------------------------------------------------- */
 
+/* Comprueba el pin DIR SIN mover el motor. Es la prueba decisiva cuando
+ * el motor gira siempre hacia el mismo lado pase lo que pase. */
+void probarDir() {
+  apagarMotor();          /* driver deshabilitado: no puede girar nada */
+
+  Serial.println();
+  Serial.println(F("=== PRUEBA DEL PIN DIR (no mueve el motor) ==="));
+  Serial.println();
+  Serial.println(F("Pon el polimetro entre DIR+ y DIR- del DM542 y ve"));
+  Serial.println(F("anotando lo que marca en cada paso."));
+
+  for (int i = 0; i < 2; i++) {
+    const bool alto = (i == 0);
+    digitalWrite(PIN_DIR, alto ? HIGH : LOW);
+    Serial.println();
+    Serial.print(F("  DIR en "));
+    Serial.print(alto ? F("ALTO") : F("BAJO"));
+    Serial.println(F("  -> mide ahora. Pulsa Enter para seguir."));
+    leerLinea(120000UL);
+  }
+
+  digitalWrite(PIN_DIR, LOW);
+  Serial.println();
+  Serial.println(F("=== COMO INTERPRETARLO ==="));
+  Serial.println();
+  Serial.println(F("  BAJO ~3.3 V  y  ALTO ~0 V"));
+  Serial.println(F("    Correcto. Los pines + estan a 3.3 V y el driver ve"));
+  Serial.println(F("    el cambio de sentido."));
+  Serial.println();
+  Serial.println(F("  BAJO ~5 V  y  ALTO ~1.7 V"));
+  Serial.println(F("    *** ESTE ES EL FALLO ***  Los pines + estan a 5 V."));
+  Serial.println(F("    Esos 1.7 V no apagan el optoacoplador, asi que el"));
+  Serial.println(F("    driver ve DIR siempre activado y el motor gira"));
+  Serial.println(F("    SIEMPRE HACIA EL MISMO LADO."));
+  Serial.println(F("    Solucion: pasar PUL+, DIR+ y ENA+ de 5 V a 3.3 V."));
+  Serial.println();
+}
+
 void ayuda() {
   Serial.println();
   Serial.println(F("+------------------------------------------------------+"));
@@ -119,11 +182,18 @@ void ayuda() {
   Serial.println(F("|  +   Mover el motor en sentido +                     |"));
   Serial.println(F("|  -   Mover el motor en sentido -                     |"));
   Serial.println(F("|  n   Cambiar cuantos pasos se dan por movimiento     |"));
+  Serial.println(F("|  r   Activar/desactivar la RAMPA de aceleracion      |"));
+  Serial.println(F("|                                                      |"));
+  Serial.println(F("|  d   PROBAR EL PIN DIR (no mueve el motor)           |"));
+  Serial.println(F("|      Usalo si el motor gira siempre hacia el mismo   |"));
+  Serial.println(F("|      lado con + y con -                              |"));
   Serial.println(F("|                                                      |"));
   Serial.println(F("|  h   Mostrar esta ayuda                              |"));
   Serial.println(F("+------------------------------------------------------+"));
   Serial.print(F("  Pasos por movimiento: "));
-  Serial.println(numPasos);
+  Serial.print(numPasos);
+  Serial.print(F("    Rampa: "));
+  Serial.println(conRampa ? F("SI") : F("NO"));
   Serial.print(F("  Estado: "));
   Serial.println(armado ? F("ARMADO (puede mover)") : F("desarmado (no mueve)"));
   Serial.println();
@@ -238,7 +308,6 @@ void loop() {
       }
       break;
 
-      /* Deberia moverse para atrás. Probar conexiones DIR y alimentación*/
     case '-':
       if (!armado) {
         Serial.println(F("Esta desarmado. Usa 'a' para armar primero."));
@@ -250,6 +319,17 @@ void loop() {
 
     case 'n': case 'N':
       cambiarPasos();
+      break;
+
+    case 'r': case 'R':
+      conRampa = !conRampa;
+      Serial.print(F(">>> Rampa de aceleracion: "));
+      Serial.println(conRampa ? F("ACTIVADA") : F("DESACTIVADA"));
+      Serial.println();
+      break;
+
+    case 'd': case 'D':
+      probarDir();
       break;
 
     case 'h': case 'H': case '?':

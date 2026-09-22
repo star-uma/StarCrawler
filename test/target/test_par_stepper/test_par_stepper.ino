@@ -10,6 +10,12 @@
  *   *** ESTA PRUEBA MUEVE UN MOTOR ***
  *   *** ROBOT SOBRE TACOS / BRAZO LIBRE ***
  *
+ *   *** LOS PINES "+" DEL DM542 VAN A 3.3V, NO A 5V ***
+ *   Las entradas son optoacopladores. Con los "+" a 5V, el nivel ALTO
+ *   del ESP32 (3.3V) deja 1.7V sobre el opto y NO lo apaga: el driver ve
+ *   la senal siempre activada. Con DIR eso hace que el motor gire
+ *   siempre hacia el mismo lado con + y con -.
+ *
  *   QUE NECESITAS
  *     - ESP32 DevKit V1 por USB
  *     - UN driver DM542 cableado (el del motor que quieras probar)
