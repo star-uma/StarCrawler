@@ -42,10 +42,13 @@ no se podía instalar ROS 2. Concretamente:
 
 | Cosa | Estado |
 |---|---|
-| Los 9 paquetes de `ros2_ws/` | **Nunca se ha hecho `colcon build`** |
-| `micro_ros_esp32_apps/starcrawler_app/` | **Nunca se ha compilado** |
-| Los 101 tests de lógica pura | Nunca se han pasado con `colcon test`; los que se han corrido a mano pasan |
-| Cualquier cosa contra el robot | Nada verificado en hardware |
+| Los 9 paquetes de `ros2_ws/` | **`colcon build` limpio** (22-09-2026, WSL Ubuntu 22.04 + Humble, 30 s). Único arreglo necesario: `micro_ros_agent` no es clave de rosdep (`ecd4ced`) |
+| `micro_ros_esp32_apps/starcrawler_app/` | **Compila** (22-09-2026) con `micro_ros_setup` humble → ESP-IDF **v4.1** (no 4.4): `starcrawler_app.bin` 459 KB, 0 errores/avisos. Arreglos: `idf_compat.h` y arrays fijos del `.msg` (`c16ad62`). Agente micro-ROS compilado. **Sin flashear ni probar** |
+| Los 101 tests de lógica pura | **`colcon test`: 101/101** (22-09-2026). Los de lint (flake8/pep257/copyright) se declaran pero no se ejecutan |
+| Robot simulado | **Levanta**: sim → odometría → GUI en `:8000`; `/odom` avanza al publicar `/cmd_vel` (22-09-2026) |
+| ESP32 real con micro-ROS | **Funciona el camino completo** (22-09-2026, ESP32 DevKit V1 pelado por usbipd): agente ↔ nodo `starcrawler_esp32` ↔ odometría/GUI. Estado correcto sin hardware (`error_bits` 111). Telemetría a **49 Hz** (best-effort + transporte a 921600 desde la app, `fbf4e5a`/`add9179`). Reconexión automática si el agente se reinicia (ping, 5 s) |
+| Mando DS4 → teleop | **Verificado en el banco de Windows** (22-09-2026): DS4 por Bluetooth → `tools/joy_bridge` (pygame→UDP) → `joy_udp_node` → teleop → twist_mux → sim. Stick izq. arriba = avance, stick der. derecha = `angular.z` negativo, X = preset. El mapeo de `ds4.yaml` estaba mal para el nodo `joy` (giro en el eje de L2, signos al revés): corregido (`7fd599e`) |
+| Cualquier cosa con motores, encoders o CAN | Nada verificado en hardware |
 
 Que un fichero exista y esté bien razonado no significa que compile. Lo normal
 es que el primer `colcon build` saque errores de `package.xml`, `setup.py` y
@@ -69,9 +72,22 @@ Lo que **sí** se puede hacer en WSL:
 
 Lo que **no** va a funcionar en WSL:
 
-- **El mando.** WSL2 no expone `/dev/input/js0`. Hay que lanzar con
-  `teleop:=false` y mover el robot simulado publicando `/cmd_vel` a mano o con
-  `teleop_twist_keyboard`.
+- **El mando no llega al WSL** (ni Bluetooth ni HID por usbipd). Solución que
+  funciona: `tools/joy_bridge/joy_bridge.py` en Windows (Python 3.12, pygame) y
+  lanzar con `joy_udp:=true`. El puente hay que arrancarlo desde una terminal
+  de la sesión de escritorio, no desde un proceso sin sesión interactiva.
+- **`rosdep install` sin terminal.** Llama a `sudo`, y si el usuario no tiene
+  `NOPASSWD` se queda colgado esperando la contraseña sin decir nada. Lanzarlo
+  desde una terminal interactiva o como root (`wsl -u root`).
+- **GitHub por HTTPS falla con el protocolo v2 de git** en esta red ("expected
+  flush after ref listing" y luego pide credenciales para repos públicos).
+  Rompe `git submodule`, `vcs import` y el ExternalProject del agente. Arreglo:
+  `git config --global protocol.version 0` (ya puesto en el WSL de Mario).
+- **El ESP32 por serie funciona con `usbipd`** (probado 22-09-2026): `usbipd bind
+  --busid X` una vez como administrador, `usbipd attach --wsl --busid X`, y aparece
+  `/dev/ttyUSB0` (sin udev: no existe `/dev/starcrawler`, usar `port:=/dev/ttyUSB0`).
+  Flashear con `ESPPORT=/dev/ttyUSB0 ros2 run micro_ros_setup flash_firmware.sh`
+  desde `~/microros_ws`. Mientras está pasado al WSL, el COM desaparece de Windows.
 - **El ESP32 por serie.** Requiere `usbipd-win`, y mientras el puerto está
   bindeado a WSL desaparece el COM de Windows. Para compilar y flashear
   firmware es más cómodo el Arduino IDE en Windows, sin WSL de por medio.
@@ -102,7 +118,7 @@ Comprobar dónde se está antes de instalar:
 lsb_release -a
 ```
 
-### Tarea 2 — instalar y compilar (issue #12) ← lo importante
+### Tarea 2 — instalar y compilar (issue #12) — HECHA 22-09-2026
 
 ```bash
 ./scripts/instalar_pc_abordo.sh humble
@@ -127,7 +143,7 @@ Python.
 Un commit por causa arreglada, no todo en uno: si algo se rompe después, así se
 localiza.
 
-### Tarea 3 — pasar los tests
+### Tarea 3 — pasar los tests — HECHA 22-09-2026
 
 ```bash
 colcon test
@@ -142,7 +158,7 @@ Son 101 tests de lógica pura, sin hardware ni ROS por debajo: conversión de
 simulado. Si alguno falla, mirar si el fallo está en el test o en el código —
 ya pasó una vez que dos tests de odometría estaban mal y el código bien.
 
-### Tarea 4 — levantar el robot simulado
+### Tarea 4 — levantar el robot simulado — HECHA 22-09-2026
 
 ```bash
 ros2 launch starcrawler_bringup robot.launch.py sim:=true gui:=true teleop:=false
@@ -158,17 +174,40 @@ Para que se mueva, sin mando:
 ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.2}, angular: {z: 0.1}}"
 ```
 
-### Tarea 5 — compilar la app de micro-ROS
+### Tarea 5 — compilar la app de micro-ROS — HECHA 22-09-2026
 
 `micro_ros_esp32_apps/starcrawler_app/` es el ESP32 como nodo ROS 2 nativo. El
 CAN, los paso a paso y los encoders se portaron a ESP-IDF **a ciegas**, así que
 es lo que más probable es que esté roto.
 
-Necesita ESP-IDF y `micro_ros_setup`, que es una instalación más pesada. No
-hace falta el robot para compilarlo. Instrucciones en
-`micro_ros_esp32_apps/starcrawler_app/README.md`.
+Workspace ya montado en el WSL de Mario: `~/microros_ws` (micro_ros_setup +
+agente en `install/`, firmware en `firmware/`, ESP-IDF v4.1 y toolchain en
+`firmware/toolchain/`). Para recompilar tras tocar la app: copiar la carpeta a
+`firmware/freertos_apps/apps/` y `ros2 run micro_ros_setup build_firmware.sh`.
+Instrucciones completas en `micro_ros_esp32_apps/starcrawler_app/README.md`.
 
 ---
+
+### Tarea 6 — interfaz 3D para ver el robot moverse por el plano (pedida por Mario, 22-09-2026)
+
+Mario quiere una GUI 3D en la que se vea el robot desplazándose por el plano
+(no solo la vista lateral 2D de los brazos que tiene la GUI web actual). Los
+datos ya existen en el grafo: `/odom` y la TF `odom→base_link` para la
+posición, `/joint_states` para los brazos y el URDF de `starcrawler_description`
+para la geometría (con primitivas; las mallas CAD siguen bloqueadas).
+
+Dos caminos razonables, a decidir con él antes de empezar:
+
+- **RViz2** con `rviz:=true`: ya está en el launch, muestra URDF + TF + odometría
+  sin escribir código. En WSL va por WSLg (`LIBGL_ALWAYS_SOFTWARE=1` si sale en
+  negro). Es lo más rápido para verlo hoy.
+- **Vista 3D dentro de la GUI web** (`starcrawler_gui`, three.js): sin depender
+  de RViz ni de un escritorio Linux, accesible desde cualquier navegador de la
+  red, y coherente con la telemetría que ya pinta. Más trabajo, pero es lo que
+  encaja con "GUI" tal como la usa el proyecto.
+
+Empezar comprobando qué publica ya el simulador (`/odom`, `/tf`,
+`/joint_states`) y que el URDF carga en `robot_state_publisher`.
 
 ## 5. Decisiones ya cerradas — no las vuelvas a abrir
 
