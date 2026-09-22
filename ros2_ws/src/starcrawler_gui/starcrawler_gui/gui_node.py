@@ -19,6 +19,7 @@ import webbrowser
 from http.server import ThreadingHTTPServer
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 from starcrawler_msgs.msg import RobotState
@@ -47,7 +48,7 @@ class NodoDashboard(Node):
 
         self.servidor = ThreadingHTTPServer(('', puerto), Manejador)
         threading.Thread(target=self.servidor.serve_forever,
-                         daemon=True).start()
+                         kwargs={'poll_interval': 0.1}, daemon=True).start()
 
         url = 'http://localhost:%d' % puerto
         self.get_logger().info('Dashboard en %s' % url)
@@ -74,6 +75,7 @@ class NodoDashboard(Node):
 
     def destroy_node(self):
         self.servidor.shutdown()
+        self.servidor.server_close()
         return super().destroy_node()
 
 
@@ -82,7 +84,7 @@ def main(args=None):
     nodo = NodoDashboard()
     try:
         rclpy.spin(nodo)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         nodo.destroy_node()
