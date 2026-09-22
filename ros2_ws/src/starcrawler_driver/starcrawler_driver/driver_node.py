@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 
+import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
@@ -361,6 +362,8 @@ def main(args=None) -> None:
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        # el launch reenvia SIGINT durante el cierre: no interrumpirlo
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         nodo.cerrar_puerto()
         nodo.destroy_node()
         if rclpy.ok():

@@ -21,6 +21,7 @@ aquel deja de servir y este sigue valiendo.
 """
 from __future__ import annotations
 
+import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -147,6 +148,8 @@ def main(args=None):
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        # el launch reenvia SIGINT durante el cierre: no interrumpirlo
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         nodo.destroy_node()
         rclpy.try_shutdown()
 

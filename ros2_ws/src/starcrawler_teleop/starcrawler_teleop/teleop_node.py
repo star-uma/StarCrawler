@@ -15,6 +15,7 @@ watchdog del ESP32 vean un flujo constante de consignas.
 """
 from __future__ import annotations
 
+import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from geometry_msgs.msg import Twist
@@ -135,6 +136,8 @@ def main(args=None) -> None:
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        # el launch reenvia SIGINT durante el cierre: no interrumpirlo
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         nodo.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
