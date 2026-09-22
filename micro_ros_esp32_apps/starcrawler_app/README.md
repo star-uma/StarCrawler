@@ -21,9 +21,9 @@ Suscripciones
   /cmd_vel           geometry_msgs/Twist
   /crawler/command   starcrawler_msgs/CrawlerCommand
 
-Publicaciones
-  /starcrawler/state starcrawler_msgs/RobotState   50 Hz
-  /joint_states      sensor_msgs/JointState        50 Hz
+Publicaciones (best-effort)
+  /starcrawler/state starcrawler_msgs/RobotState   ~35 Hz medidos a 115200
+  /joint_states      sensor_msgs/JointState        ~35 Hz medidos a 115200
 ```
 
 ### Tareas
@@ -130,8 +130,20 @@ ficheros de la app. Lo que hubo que tocar en la primera compilación:
   secuencias de `JointState` (`name`, `position`) necesitan buffers.
 - Faltaba `rosidl_runtime_c/string_functions.h`.
 
-**Sin probar en hardware.** Que compile no dice nada del CAN, los steppers ni
-los encoders: eso solo se ve con el robot sobre tacos.
+**Probado con un ESP32 sin nada conectado** (22-09-2026): el agente establece
+una única sesión, el nodo `starcrawler_esp32` publica ambos tópicos y el estado
+es el correcto para una placa pelada (`encoder_ok` ×4 false, `can_ok` false,
+`safety_active` true, `error_bits` 111 = encoders + CAN + watchdog).
+
+Tasas medidas: con los publishers fiables por defecto llegaban 17 Hz de estado y
+12 Hz de `joint_states` (el stream fiable descartaba); en best-effort, 35 Hz las
+dos. Ese es el techo del enlace: ~270 B por ciclo a 115200 baudios son ~23 ms
+de cable, y los 50 Hz del diseño no caben. Para llegar a 50 Hz hay que subir el
+baudio del transporte (está grabado en `microros_transports.c` de
+`freertos_apps`, no en la app) o publicar `joint_states` a menos frecuencia.
+
+CAN, steppers y encoders siguen **sin verificar**: eso solo se ve con el robot
+sobre tacos.
 
 **Antes de flashearlo al robot**, que funcione con el robot sobre tacos y
 habiendo pasado la puesta en marcha de `test/target/`.

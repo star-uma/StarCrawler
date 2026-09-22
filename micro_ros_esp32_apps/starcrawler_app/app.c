@@ -325,6 +325,7 @@ static void TaskControl(void *arg) {
 
 static void TaskMicroROS(void *arg) {
     (void)arg;
+    TickType_t ultimoDespertar = xTaskGetTickCount();
 
     for (;;) {
         rclc_executor_spin_some(&executor, RCL_MS_TO_NS(5));
@@ -361,7 +362,7 @@ static void TaskMicroROS(void *arg) {
         RCNOCHECK(rcl_publish(&pub_joints, &msg_joints, NULL));
 
         tickExecutor = (int64_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
-        vTaskDelay(pdMS_TO_TICKS(PERIODO_ROS_MS));
+        vTaskDelayUntil(&ultimoDespertar, pdMS_TO_TICKS(PERIODO_ROS_MS));
     }
 }
 
@@ -430,12 +431,14 @@ void appMain(void *argument) {
     RCCHECK(rclc_support_init(&soporte, 0, NULL, &allocator));
     RCCHECK(rclc_node_init_default(&nodo, "starcrawler_esp32", "", &soporte));
 
-    RCCHECK(rclc_publisher_init_default(
+    /* Telemetria best-effort, como las suscripciones: sobre serie a
+     * 115200 el stream fiable descartaba la mitad de los mensajes. */
+    RCCHECK(rclc_publisher_init_best_effort(
         &pub_estado, &nodo,
         ROSIDL_GET_MSG_TYPE_SUPPORT(starcrawler_msgs, msg, RobotState),
         "starcrawler/state"));
 
-    RCCHECK(rclc_publisher_init_default(
+    RCCHECK(rclc_publisher_init_best_effort(
         &pub_joints, &nodo,
         ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState),
         "joint_states"));
