@@ -37,6 +37,12 @@ las comunicaciones al 0.
 | `micro_ros` | 0 | 20 ms | gira el executor y publica estado |
 | `wdt` | 0 | 50 ms | si el executor se cuelga, para y reinicia |
 
+Además, la tarea `micro_ros` hace `rmw_uros_ping_agent` cada segundo: el
+cliente XRCE no reenvía `CREATE_CLIENT` por sí solo, así que si el agente se
+reinicia (relanzar el launch, reiniciar el PC) la placa se quedaría muda hasta
+un apagado. Tras 5 s sin respuesta: parada segura y reinicio. Medido: el
+agente relanzado recupera la sesión en ~5 s.
+
 La ISR de los steppers sigue corriendo a 20 kHz por timer hardware, igual que
 en la versión Arduino, con su rampa de aceleración.
 

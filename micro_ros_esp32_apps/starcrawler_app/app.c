@@ -70,6 +70,13 @@
 /* Si el executor deja de girar, el nodo esta muerto: reiniciar */
 #define WDT_EXECUTOR_MS     2000
 
+/* El cliente XRCE no reenvia CREATE_CLIENT si el agente se reinicia: sin
+ * esto habria que apagar y encender la placa. Ping cada segundo y, tras
+ * PING_FALLOS_MAX seguidos sin respuesta, parada segura y reinicio. */
+#define PING_CADA_CICLOS    50
+#define PING_TIMEOUT_MS     20
+#define PING_FALLOS_MAX     5
+
 #define RCCHECK(fn) { rcl_ret_t rc_ = fn; if (rc_ != RCL_RET_OK) { \
     vTaskDelay(pdMS_TO_TICKS(100)); esp_restart(); } }
 #define RCNOCHECK(fn) { rcl_ret_t rc_ = fn; (void)rc_; }
@@ -329,9 +336,22 @@ static void TaskControl(void *arg) {
 static void TaskMicroROS(void *arg) {
     (void)arg;
     TickType_t ultimoDespertar = xTaskGetTickCount();
+    uint32_t ciclos = 0;
+    int fallosPing = 0;
 
     for (;;) {
         rclc_executor_spin_some(&executor, RCL_MS_TO_NS(5));
+
+        if (++ciclos % PING_CADA_CICLOS == 0) {
+            if (rmw_uros_ping_agent(PING_TIMEOUT_MS, 1) == RMW_RET_OK) {
+                fallosPing = 0;
+            } else if (++fallosPing >= PING_FALLOS_MAX) {
+                liberarTraccion();
+                steppers_pararTodos();
+                vTaskDelay(pdMS_TO_TICKS(20));
+                esp_restart();
+            }
+        }
 
         portENTER_CRITICAL(&mux);
         float ang[CC_NUM_ORUGAS];
