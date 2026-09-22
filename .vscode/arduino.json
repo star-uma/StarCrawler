@@ -1,5 +1,5 @@
 {
-  "board": "arduino:samd:mkrwifi1010",
-  "port": "COM3",
-  "sketch": "firmware/starcrawler_mkr_traccion/starcrawler_mkr_traccion.ino"
+  "board": "esp32-bluepad32:esp32:esp32doit-devkit-v1",
+  "sketch": "firmware/starcrawler_esp32_standalone/starcrawler_esp32_standalone.ino",
+  "output": ".build"
 }
