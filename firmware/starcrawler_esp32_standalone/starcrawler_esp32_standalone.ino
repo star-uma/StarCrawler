@@ -35,6 +35,7 @@
  * posterior; si se empareja con un móvil, vale).
  */
 #include <Bluepad32.h>
+#include <string.h>
 
 #include "config.h"
 #include "control_core.h"
@@ -350,6 +351,38 @@ static void emitirTelemetriaSerie() {
 
 /* ─── Setup ──────────────────────────────────────────────────────────────── */
 
+/* --- Consola de mantenimiento por puerto serie --- */
+
+/* Re-emparejar un mando obligaba a descomentar forgetBluetoothKeys(),
+ * compilar y flashear dos veces. Esto lo hace en caliente. No bloquea el
+ * lazo: acumula caracteres y solo actua con la linea completa. */
+static char lineaConsola[24];
+static uint8_t largoConsola = 0;
+
+static void atenderConsola() {
+  while (Serial.available()) {
+    const char c = (char)Serial.read();
+    if (c == 13) continue;                 /* CR */
+    if (c != 10) {                         /* no es LF: acumular */
+      if (largoConsola < sizeof(lineaConsola) - 1) lineaConsola[largoConsola++] = c;
+      continue;
+    }
+    lineaConsola[largoConsola] = 0;
+    largoConsola = 0;
+
+    if (strcmp(lineaConsola, "OLVIDAR") == 0) {
+      activarSeguridad("Borrando emparejamiento: motores liberados.");
+      BP32.forgetBluetoothKeys();
+      Serial.println("[MANDO] Emparejamientos borrados. Reiniciando...");
+      Serial.flush();
+      delay(200);
+      ESP.restart();
+    } else if (lineaConsola[0] != 0) {
+      Serial.println("[SERIE] Ordenes: OLVIDAR = borrar el emparejamiento.");
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -387,6 +420,7 @@ void setup() {
 
   Serial.println("\nListo. Pon el mando Xbox en modo emparejamiento");
   Serial.println("(boton de sincronizacion hasta parpadeo rapido).\n");
+  Serial.println("Para emparejar OTRO mando: escribe OLVIDAR y Enter.");
 }
 
 /* ─── Lazo principal (100 Hz) ────────────────────────────────────────────── */
@@ -394,6 +428,9 @@ void setup() {
 void loop() {
   const uint32_t inicioCiclo = millis();
   contadorCiclos++;
+
+  /* Consola de mantenimiento (no bloquea el lazo) */
+  atenderConsola();
 
   /* 1. Refrescar datos del mando */
   const bool datosNuevos = BP32.update();

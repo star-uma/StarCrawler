@@ -82,9 +82,10 @@ arduino-cli upload -p COMx --fqbn esp32-bluepad32:esp32:esp32doit-devkit-v1 firm
 2. Enciende el mando y mantén el botón de sincronización (arriba) hasta que la
    luz parpadee rápido.
 3. En unos segundos conecta y el monitor serie muestra `[MANDO] Conectado`.
-4. El emparejamiento persiste entre reinicios. Para re-emparejar otro mando,
-   descomenta `BP32.forgetBluetoothKeys()` en el setup, flashea una vez y
-   vuelve a comentarla.
+4. El emparejamiento persiste entre reinicios. Para emparejar **otro** mando,
+   escribe `OLVIDAR` en el monitor serie y pulsa Enter: el ESP32 libera los
+   motores, borra las claves y se reinicia listo para emparejar. No hace falta
+   recompilar ni flashear.
 
 ## Seguridad
 
