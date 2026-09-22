@@ -57,9 +57,10 @@
  *   - oruga subiendo (ángulo del encoder disminuye)  -> +COMPENSACION_DPS (s.h)
  *   - oruga bajando  (ángulo del encoder aumenta)    -> -COMPENSACION_DPS (s.ah)
  *   - oruga parada                                    -> velocidad 0 (frenado)
- * El modelo original usaba 5 º/s constante con ángulo <180º y una velocidad
- * variable con ángulo >180º cuya fórmula queda por extraer del .slx: aquí se
- * usa constante en todo el rango como aproximación.
+ * Con ángulo <180º el original usaba 5 º/s constante; con >180º, velocidad
+ * variable según  w = d·sin(a)·w_stepper / R2  (TFG, ec. 7.7). Aquí se usa
+ * constante en todo el rango como aproximación: falta fijar el origen de
+ * "a" y qué radio es R2. Ver docs/cadena_de_elevacion.md e issue #6.
  */
 #define COMPENSACION_TRACCION 1
 #define COMPENSACION_DPS      5.0f

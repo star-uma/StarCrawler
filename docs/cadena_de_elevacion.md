@@ -186,6 +186,61 @@ pero si el driver dejara de responder del todo, ahí está la causa.
 
 ---
 
+## La compensación de tracción
+
+Mientras un brazo bascula, la banda de esa oruga arrastraría sobre el suelo si
+el motor de tracción se quedara quieto. Para evitarlo, el RMD gira a la vez.
+
+El comportamiento depende de qué polea toca el suelo:
+
+| Ángulo | Qué apoya | Compensación |
+|---|---|---|
+| 90°–180° | polea **activa** | Girar en sentido opuesto al paso a paso, a **5 °/s constante** |
+| 180°–270° | polea **pasiva** | **Variable con el ángulo** |
+
+En el segundo caso, el desplazamiento horizontal del centro de la polea pasiva
+es `x = d·(1 − cos α)`, y derivando respecto al tiempo sale la velocidad que
+debe llevar el motor de tracción:
+
+```
+ω_servo [°/s] = (d · sin(α) · ω_stepper / R2) · (180/π)
+```
+
+| Símbolo | Qué es | Valor |
+|---|---|---|
+| `d` | distancia entre ejes de la oruga | **0,30445 m** (del CAD) |
+| `R2` | radio de la rueda menor | pendiente |
+| `α` | posición angular del centro de la rueda menor | variable |
+| `ω_stepper` | velocidad del paso a paso | constante |
+
+Está deducido en el capítulo 7 del TFG, ecuaciones 7.2 a 7.7, con la máquina de
+estados en el código 7.1.
+
+### Lo que falta antes de implementarla
+
+El firmware usa hoy **5 °/s constante en todo el rango** como aproximación.
+Para programar la fórmula real hay dos cosas sin cerrar:
+
+- **El origen de α.** La memoria dice en un sitio que se mide «respecto a la
+  horizontal» y en otro que la velocidad *disminuye* al acercarse a 270°. Con α
+  desde la horizontal, `sin(α)` aumenta. Una de las dos cosas está mal.
+- **Qué radio es `R2`.** Se define como «rueda menor» pero también se le llama
+  «rueda motriz», que es la grande.
+
+### Y una discrepancia con la tabla de signos
+
+La memoria reparte la lógica **en diagonal** (FR igual que RL; FL y RR con los
+estados intercambiados), lo que daría `{+1, −1, −1, +1}`. El firmware tiene
+`{+1, −1, +1, −1}`, que es **izquierda/derecha**. No coinciden en RR ni en RL.
+
+Puede que no sean comparables —el signo eléctrico del RMD y el espejado
+geométrico de la oruga son cosas distintas— pero al verificar sobre tacos hay
+que **mirar las cuatro orugas por separado**, no asumir simetría.
+
+Todo el detalle está en la issue #6.
+
+---
+
 ## Dónde vive cada constante
 
 Todas en `config.h`, en las cuatro variantes de firmware:
