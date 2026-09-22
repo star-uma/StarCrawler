@@ -19,6 +19,7 @@ proposito y publish_tf se puede desactivar.
 from __future__ import annotations
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 from nav_msgs.msg import Odometry
@@ -135,7 +136,7 @@ def main(args=None):
     nodo = OdometriaOrugas()
     try:
         rclpy.spin(nodo)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         nodo.destroy_node()

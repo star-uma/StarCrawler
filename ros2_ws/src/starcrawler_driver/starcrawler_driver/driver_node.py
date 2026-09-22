@@ -26,6 +26,7 @@ from __future__ import annotations
 import math
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from geometry_msgs.msg import Quaternion, TransformStamped, Twist
 from nav_msgs.msg import Odometry
@@ -357,7 +358,7 @@ def main(args=None) -> None:
     nodo = StarCrawlerDriver()
     try:
         rclpy.spin(nodo)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         nodo.cerrar_puerto()

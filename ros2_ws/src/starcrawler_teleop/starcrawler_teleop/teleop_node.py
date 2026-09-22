@@ -16,6 +16,7 @@ watchdog del ESP32 vean un flujo constante de consignas.
 from __future__ import annotations
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
@@ -131,7 +132,7 @@ def main(args=None) -> None:
     nodo = StarCrawlerTeleop()
     try:
         rclpy.spin(nodo)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         nodo.destroy_node()
