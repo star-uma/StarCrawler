@@ -42,8 +42,9 @@ def generate_launch_description():
             description='El ESP32 es nodo ROS 2 nativo: se lanza el agente '
                         'de micro-ROS en vez del nodo driver'),
         DeclareLaunchArgument(
-            'micro_ros_baud', default_value='115200',
-            description='Debe coincidir con lo que fijo configure_firmware.sh'),
+            'micro_ros_baud', default_value='921600',
+            description='Debe coincidir con SERIE_BAUDIOS del config.h de la '
+                        'app de micro-ROS'),
         DeclareLaunchArgument(
             'sim', default_value='false',
             description='Robot simulado a nivel de topicos, sin hardware ni '

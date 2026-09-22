@@ -26,6 +26,8 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <rmw/qos_profiles.h>
+#include <rmw_microros/rmw_microros.h>
+#include <uxr/client/transport.h>
 
 #include <geometry_msgs/msg/twist.h>
 #include <sensor_msgs/msg/joint_state.h>
@@ -40,6 +42,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
+#include "driver/uart.h"
 #include "idf_compat.h"
 
 #include "config.h"
@@ -412,6 +415,25 @@ static void prepararMensajes(void) {
     geometry_msgs__msg__Twist__init(&msg_cmd_vel);
 }
 
+/* --- Transporte serie ------------------------------------------------ */
+
+/* Las funciones del transporte de freertos_apps (microros_transports.c).
+ * Se reutilizan tal cual salvo la apertura, que deja el UART a 115200. */
+extern bool   esp32_serial_open(struct uxrCustomTransport *t);
+extern bool   esp32_serial_close(struct uxrCustomTransport *t);
+extern size_t esp32_serial_write(struct uxrCustomTransport *t,
+                                 const uint8_t *buf, size_t len, uint8_t *err);
+extern size_t esp32_serial_read(struct uxrCustomTransport *t, uint8_t *buf,
+                                size_t len, int timeout, uint8_t *err);
+
+static size_t puertoSerie = UART_NUM_0;
+
+static bool abrirSerie(struct uxrCustomTransport *t) {
+    if (!esp32_serial_open(t)) return false;
+    return uart_set_baudrate((uart_port_t)*(size_t *)t->args,
+                             SERIE_BAUDIOS) == ESP_OK;
+}
+
 /* --- Punto de entrada ------------------------------------------------ */
 
 void appMain(void *argument) {
@@ -426,6 +448,11 @@ void appMain(void *argument) {
     if (canOk) liberarTraccion();
 
     prepararMensajes();
+
+    /* Sustituye al transporte que registra main.c: mismo UART, mas baudio */
+    rmw_uros_set_custom_transport(true, (void *)&puertoSerie, abrirSerie,
+                                  esp32_serial_close, esp32_serial_write,
+                                  esp32_serial_read);
 
     allocator = rcl_get_default_allocator();
     RCCHECK(rclc_support_init(&soporte, 0, NULL, &allocator));

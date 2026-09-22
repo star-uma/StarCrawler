@@ -22,8 +22,8 @@ Suscripciones
   /crawler/command   starcrawler_msgs/CrawlerCommand
 
 Publicaciones (best-effort)
-  /starcrawler/state starcrawler_msgs/RobotState   ~35 Hz medidos a 115200
-  /joint_states      sensor_msgs/JointState        ~35 Hz medidos a 115200
+  /starcrawler/state starcrawler_msgs/RobotState   50 Hz (49,2 medidos a 921600)
+  /joint_states      sensor_msgs/JointState        50 Hz (49,3 medidos a 921600)
 ```
 
 ### Tareas
@@ -80,15 +80,15 @@ rosdep: se construye una vez con `micro_ros_setup` dentro del mismo workspace:
 ros2 run micro_ros_setup create_agent_ws.sh
 ros2 run micro_ros_setup build_agent.sh
 source install/local_setup.bash
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/starcrawler -b 115200
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/starcrawler -b 921600
 ```
 
-> 115200 es lo que lleva grabado el transporte serie de `freertos_apps`
-> (`microros_transports.c`), y no se cambia desde la app ni desde menuconfig.
-> Es también el valor por defecto de `micro_ros_baud` en `robot.launch.py`.
-
-> El paso 3 es el que más se olvida. Sin `starcrawler_msgs` dentro de
-> `mcu_ws`, la compilación falla al no encontrar los tipos.
+> El transporte de `freertos_apps` abre el UART a 115200 (literal en
+> `microros_transports.c`, sin opción de menuconfig). A esa velocidad no caben
+> los dos tópicos a 50 Hz (~270 B por ciclo son ~23 ms de cable; medidos 35 Hz).
+> Por eso `app.c` registra su propio transporte, que envuelve al de
+> `freertos_apps` y sube el baudio a `SERIE_BAUDIOS` (921600) al abrir. El
+> agente y `micro_ros_baud` del launch deben ir al mismo valor.
 
 ## Versiones
 
@@ -135,12 +135,13 @@ una única sesión, el nodo `starcrawler_esp32` publica ambos tópicos y el esta
 es el correcto para una placa pelada (`encoder_ok` ×4 false, `can_ok` false,
 `safety_active` true, `error_bits` 111 = encoders + CAN + watchdog).
 
-Tasas medidas: con los publishers fiables por defecto llegaban 17 Hz de estado y
-12 Hz de `joint_states` (el stream fiable descartaba); en best-effort, 35 Hz las
-dos. Ese es el techo del enlace: ~270 B por ciclo a 115200 baudios son ~23 ms
-de cable, y los 50 Hz del diseño no caben. Para llegar a 50 Hz hay que subir el
-baudio del transporte (está grabado en `microros_transports.c` de
-`freertos_apps`, no en la app) o publicar `joint_states` a menos frecuencia.
+Tasas medidas: con los publishers fiables por defecto a 115200 llegaban 17 Hz
+de estado y 12 Hz de `joint_states` (el stream fiable descartaba); en
+best-effort, 35 Hz las dos, que es el techo físico de 115200 (~270 B por ciclo
+son ~23 ms de cable). Con el transporte a 921600, **49,2 y 49,3 Hz** medidos a
+la vez durante 30 s en régimen. En esa ventana hubo un hueco aislado de ~3 s en
+ambos tópicos, sin determinar si viene del firmware o del camino
+USB→usbipd→WSL del banco; comprobar en el PC de a bordo.
 
 CAN, steppers y encoders siguen **sin verificar**: eso solo se ve con el robot
 sobre tacos.

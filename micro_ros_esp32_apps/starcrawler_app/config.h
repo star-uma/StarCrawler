@@ -19,7 +19,9 @@
 
 /* ═══ ENLACE SERIE CON EL PC ══════════════════════════════════════════════ */
 
-/* El baudio lo fija el transporte de freertos_apps: 115200, no configurable. */
+/* freertos_apps abre el UART a 115200; la app lo sube a este valor al abrir
+ * el transporte. El agente debe usar el mismo (micro_ros_baud del launch). */
+#define SERIE_BAUDIOS 921600
 /* Sin consigna valida en este tiempo -> estado seguro. Mas apretado que los
  * 500 ms del enlace WiFi porque el USB es local y va a 50 tramas/s. */
 #define WATCHDOG_TIMEOUT_MS 300
