@@ -13,18 +13,28 @@ Rama: `feature/ros2`. Workspace: [`ros2_ws/`](../ros2_ws).
 ```
         [Mando DS4] ──Bluetooth──┐
                                  ▼
-┌──────────────────────────────────────────────────────────────┐
-│  PC A BORDO — Ubuntu 24.04 + ROS 2 Jazzy                     │
-│                                                              │
-│   joy_node ──/joy──► starcrawler_teleop ──/cmd_vel───────┐   │
-│                                       └──/crawler/command┤   │
-│                                                          ▼   │
-│                                          starcrawler_driver  │
-│   robot_state_publisher ◄──/joint_states──────┤               │
-│   rviz2 / rosbag / (Nav2 a futuro) ◄──/starcrawler/state      │
-│                                        /diagnostics          │
-└───────────────────────────────┬──────────────────────────────┘
-                                │ USB serie 921600, tramas con CRC16
+┌────────────────────────────────────────────────────────────────────┐
+│  PC A BORDO — Ubuntu + ROS 2                                       │
+│                                                                    │
+│  joy_node ─/joy─► starcrawler_teleop ─/cmd_vel_joy─┐               │
+│                          │                         ▼               │
+│                          │                    twist_mux            │
+│                          │                         │ /cmd_vel      │
+│                          └──/crawler/command──┐    │               │
+│                                               ▼    ▼               │
+│                                   ╔════════════════════════╗       │
+│                                   ║  UNO DE LOS TRES:      ║       │
+│                                   ║  · starcrawler_driver  ║       │
+│                                   ║  · agente micro-ROS    ║       │
+│                                   ║  · starcrawler_sim     ║       │
+│                                   ╚════════════════════════╝       │
+│                                               │                    │
+│            /starcrawler/state  ·  /joint_states                    │
+│                    ├──► starcrawler_odometry ──/odom──► TF         │
+│                    ├──► starcrawler_gui       (web en :8000)       │
+│                    └──► robot_state_publisher ──► rviz2            │
+└───────────────────────────────┬────────────────────────────────────┘
+                                │ USB serie
                                 ▼
                     ┌───────────────────────────┐
                     │  ESP32 (tiempo real)      │
@@ -36,6 +46,37 @@ Rama: `feature/ros2`. Workspace: [`ros2_ws/`](../ros2_ws).
                     │              4x AS5600    │  encoders
                     └───────────────────────────┘
 ```
+
+### Las tres formas de correr el sistema
+
+Lo que cambia entre ellas es **quién ocupa el bloque del medio**. El resto
+del grafo es idéntico, porque los tópicos son los mismos.
+
+| Modo | Arranque | Quién habla con el grafo |
+|---|---|---|
+| **Robot real** | (por defecto) | `starcrawler_driver`, que traduce tramas serie con CRC16 |
+| **micro-ROS** | `micro_ros:=true` | El agente. El ESP32 publica y se suscribe por sí mismo |
+| **Simulado** | `sim:=true` | `starcrawler_sim`, sin hardware ninguno |
+
+Los tres son excluyentes: el launch se encarga de que no se pisen.
+
+### Los paquetes del workspace
+
+| Paquete | Qué hace |
+|---|---|
+| `starcrawler_msgs` | `CrawlerCommand` y `RobotState` |
+| `starcrawler_description` | URDF/xacro del robot |
+| `starcrawler_teleop` | Mando a `/cmd_vel_joy` y `/crawler/command` |
+| `starcrawler_driver` | Puente serie con el ESP32 (modo robot real) |
+| `starcrawler_sim` | Robot simulado a nivel de tópicos |
+| `starcrawler_odometry` | `/odom` y la TF `odom -> base_footprint` |
+| `starcrawler_gui` | Interfaz web con el robot dibujado |
+| `starcrawler_common` | La traducción de ángulos, compartida |
+| `starcrawler_bringup` | Launch, `systemd` y reglas `udev` |
+
+`twist_mux` viene de ROS, no es propio: elige entre las fuentes de velocidad
+por prioridad y descarta la que deje de publicar.
+
 
 ### ¿Por qué el ESP32 se queda?
 
@@ -92,22 +133,34 @@ corrompe el sistema de ficheros. Reserva también un USB para el ESP32.
 
 ---
 
-## 3. Instalar ROS 2 (Ubuntu 24.04 + Jazzy)
+## 3. Instalar ROS 2
 
-**Distribución elegida: ROS 2 Jazzy Jalisco** sobre **Ubuntu 24.04 LTS**. Es
-la LTS con soporte hasta 2029; es lo que quieres en un robot que va a durar.
+> **La distribución está sin decidir** (issue #15). Hay que cerrarlo **antes**
+> de instalar el sistema en el mini PC: ROS 2 se distribuye por versión de
+> Ubuntu, así que cambiar después significa reinstalar la máquina.
 
-> **Nota WSL / Ubuntu 22.04:** si desarrollas en un WSL con Ubuntu 22.04
-> (jammy), instala **ROS 2 Humble** en su lugar: mismos pasos cambiando
-> `jazzy` por `humble` y `$UBUNTU_CODENAME` resuelve a `jammy`. Todos los
-> paquetes de StarCrawler funcionan igual en ambas. Humble tiene soporte
-> hasta mayo de 2027; para el PC definitivo del robot, mejor 24.04 + Jazzy.
+| | Ubuntu | Fin de soporte | A favor |
+|---|---|---|---|
+| **Humble** | 22.04 | mayo 2027 | Lo que usa el laboratorio: Donatello, `uma_environment` y la receta de micro-ROS para ESP32 van sobre Humble. Si algo falla, hay gente cerca que ya se lo ha encontrado |
+| **Jazzy** | 24.04 | mayo 2029 | Dos años más de soporte, pero abre camino en solitario |
+
+**Recomendación: Humble**, sobre todo si se va a migrar el firmware a
+micro-ROS, que es la parte delicada. Los comandos de abajo sirven para las
+dos: solo cambia el valor de `ROS_DISTRO` en el primer paso.
+
+Hay un script que hace todo esto: [`scripts/instalar_pc_abordo.sh`](../scripts/instalar_pc_abordo.sh),
+que además comprueba que la versión de Ubuntu case con la distribución antes
+de empezar. Los pasos manuales quedan aquí como referencia.
 
 > Los pasos exactos de instalación cambian de vez en cuando (el repositorio de
 > ROS pasó a distribuirse con un paquete `ros2-apt-source`). Si algo falla,
-> la referencia buena es <https://docs.ros.org/en/jazzy/Installation.html>.
+> la referencia buena es <https://docs.ros.org/en/humble/Installation.html>
+> (o la de `jazzy`, segun la que se elija).
 
 ```bash
+# 0. Elige la distribucion (ver la tabla de arriba)
+export ROS_DISTRO=humble
+
 # 1. Locale UTF-8
 sudo apt update && sudo apt install -y locales
 sudo locale-gen en_US en_US.UTF-8
@@ -124,16 +177,16 @@ http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME
 
 # 3. ROS 2 Jazzy + herramientas de compilación
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y ros-jazzy-desktop ros-dev-tools
+sudo apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools
 
 # 4. Paquetes que usa StarCrawler
 sudo apt install -y \
-    ros-jazzy-joy ros-jazzy-xacro ros-jazzy-robot-state-publisher \
-    ros-jazzy-joint-state-publisher-gui ros-jazzy-rviz2 \
-    ros-jazzy-diagnostic-updater python3-serial
+    ros-$ROS_DISTRO-joy ros-$ROS_DISTRO-xacro ros-$ROS_DISTRO-robot-state-publisher \
+    ros-$ROS_DISTRO-joint-state-publisher-gui ros-$ROS_DISTRO-rviz2 \
+    ros-$ROS_DISTRO-diagnostic-updater \n    ros-$ROS_DISTRO-twist-mux python3-serial
 
 # 5. Cargar ROS en cada terminal (y dejarlo en el .bashrc)
-echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
+echo 'source /opt/ros/$ROS_DISTRO/setup.bash' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -166,13 +219,39 @@ recompilar (muy cómodo mientras se ajustan parámetros).
 
 ## 4. Probar sin hardware (hazlo primero)
 
-El driver incluye un **ESP32 simulado** que integra un modelo del robot
-(velocidad real de los steppers, límites de recorrido, watchdog). Sirve para
-validar todo el grafo ROS y ver el robot moverse en RViz sin tocar el robot:
+Hay **dos simuladores**, y sirven para cosas distintas.
+
+### El robot simulado (`sim:=true`)
+
+`starcrawler_sim` sustituye al robot entero: publica los mismos tópicos que
+publicará el ESP32 con micro-ROS, así que el resto del grafo no distingue si
+hay hardware o no.
+
+```bash
+ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true gui:=true
+```
+
+Con eso se levanta la cadena completa sin nada conectado: mando, `twist_mux`,
+robot, odometría, interfaz web y RViz.
+
+Se pueden simular averías para ver cómo responde el grafo con el robot
+degradado, sin desconectar nada de verdad:
+
+```bash
+ros2 launch starcrawler_bringup robot.launch.py sim:=true   --ros-args -p starcrawler_sim.encoders_ok:=false
+```
+
+### El ESP32 simulado (`simulate:=true`)
+
+`starcrawler_driver` trae además un simulador **a nivel de puerto serie**: se
+mete en medio del driver y responde tramas con CRC16. Sirve para probar el
+protocolo y el propio driver, cosa que el anterior no hace.
 
 ```bash
 ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true
 ```
+
+Ese desaparecerá con micro-ROS, porque desaparece el protocolo. El otro no.
 
 Y para mover las orugas a mano y comprobar el URDF y los signos:
 
@@ -348,8 +427,17 @@ si el cable USB da problemas, se ve en `frames_crc_error`.
 | Convención de signos en el URDF | ✅ las 4 orugas suben con valor positivo |
 | package.xml / YAML / sintaxis Python | ✅ |
 
+**Añadido después, con tests que se ejecutan en el PC:**
+
+| Comprobación | Resultado |
+|---|---|
+| Traducción de ángulos (`starcrawler_common`) | ✅ 11/11, contrastada con el TFG |
+| Modelo del robot simulado (`starcrawler_sim`) | ✅ 22/22 |
+| Odometría (`starcrawler_odometry`) | ✅ 15/15 |
+
 **Sin verificar (necesita Ubuntu o el robot):** `colcon build` completo,
-arranque real de los nodos, y todo lo del apartado 7.
+arranque real de los nodos, y todo lo del apartado 7. Nada del workspace se ha
+ejecutado nunca: esa es la issue #12 y es lo primero que hay que hacer.
 
 **Siguientes pasos naturales:**
 
@@ -361,8 +449,11 @@ arranque real de los nodos, y todo lo del apartado 7.
    las orugas.
 3. **Nav2**: con `/cmd_vel`, odometría fusionada y un LiDAR 2D barato, el
    robot navega solo. Es donde ROS 2 empieza a pagar de verdad.
-4. **micro-ROS en el ESP32** si se quiere que el micro sea un nodo ROS nativo
-   (ojo: sustituye la pila de comunicaciones del firmware).
+4. **micro-ROS en el ESP32**: ya hay una primera versión escrita en
+   [`micro_ros_esp32_apps/starcrawler_app/`](../micro_ros_esp32_apps/starcrawler_app),
+   con la misma estructura que la de Donatello, pero **sin compilar nunca**.
+   Ojo: sustituye la pila de comunicaciones del firmware y con ella
+   desaparece `starcrawler_driver`. Es la issue #16.
 
 Nota sobre reutilización: `control_core` y `proto` son C puro sin
 dependencias, y `protocol.py` / `joy_logic.py` no importan rclpy. Es decir,
