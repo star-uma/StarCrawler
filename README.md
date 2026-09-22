@@ -2,6 +2,11 @@
 
 Refactoring of the **Horu** robot control system — renamed **StarCrawler**. Migrates from Simulink + Arduino IDE to a fully version-controlled Python + VS Code environment.
 
+> **Para retomar el trabajo, o para abrir una sesión de Claude en este repo:**
+> [`README-CLAUDE.md`](README-CLAUDE.md) tiene el estado real del proyecto —qué
+> está verificado y qué no— y las tareas en orden. Las normas de trabajo están
+> en [`CLAUDE.md`](CLAUDE.md), que Claude Code carga solo.
+
 > **v2 en desarrollo — arquitectura unificada:** todo el control (tracción CAN,
 > elevación, IMU, WiFi) pasa a un único ESP32, eliminando el Arduino MKR.
 > Dos variantes: `firmware/starcrawler_esp32/` (completa, modos 1-5 con IMU) y

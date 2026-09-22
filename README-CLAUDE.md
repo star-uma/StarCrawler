@@ -124,6 +124,9 @@ faltan en `package.xml`, `entry_points` mal puestos en `setup.py` y el paquete
 de mensajes `starcrawler_msgs`, que es CMake y se construye distinto a los de
 Python.
 
+Un commit por causa arreglada, no todo en uno: si algo se rompe después, así se
+localiza.
+
 ### Tarea 3 — pasar los tests
 
 ```bash
@@ -167,7 +170,31 @@ hace falta el robot para compilarlo. Instrucciones en
 
 ---
 
-## 5. Lo que no hay que hacer
+## 5. Decisiones ya cerradas — no las vuelvas a abrir
+
+Media sesión se puede ir en rediscutir cosas que ya están decididas. Estas lo
+están:
+
+- **Sin LiDAR ni mapeo.** Se quitaron de esta rama a propósito: el robot no
+  lleva LiDAR y nav2 no pinta nada todavía. No lo vuelvas a meter.
+- **CAN del ESP32: TWAI interno + transceptor SN65HVD230**, no un MCP2515. El
+  backend TWAI ya está escrito en `can_bus.cpp`; falta el chip. El porqué está
+  en la issue #7.
+- **Gazebo, descartado por ahora.** No modela orugas de forma nativa, y el
+  esfuerzo no compensa frente al simulador a nivel de tópicos que ya existe en
+  `starcrawler_sim`.
+- **Las mallas CAD del URDF están bloqueadas**: hacen falta FreeCAD y los
+  ficheros del CAD. Mientras tanto el URDF va con primitivas.
+- **Los firmwares de `firmware/` siguen en Arduino core**, no se migran a
+  ESP-IDF. La app de `micro_ros_esp32_apps/` sí es ESP-IDF, porque es lo que
+  pide micro-ROS.
+
+Si crees de verdad que alguna hay que reabrirla, dilo y que lo decida Mario.
+Por tu cuenta, no.
+
+---
+
+## 6. Lo que no hay que hacer
 
 - **No commitear notas ni docs por iniciativa propia.** El razonamiento va a
   los `.md` que se pidan y a las issues, no a comentarios en el código.
@@ -178,7 +205,7 @@ hace falta el robot para compilarlo. Instrucciones en
 
 ---
 
-## 6. Mapa del repo
+## 7. Mapa del repo
 
 ```
 ros2_ws/src/
@@ -206,7 +233,7 @@ hardware).
 
 ---
 
-## 7. Issues abiertas que tocan esto
+## 8. Issues abiertas que tocan esto
 
 - **#12** — primer `colcon build` del workspace.
 - **#15** — decidir Humble o Jazzy.
