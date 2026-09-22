@@ -59,6 +59,10 @@ def generate_launch_description():
             'teleop', default_value='true',
             description='Arrancar el mando y la teleoperacion'),
         DeclareLaunchArgument(
+            'joy_udp', default_value='false',
+            description='El mando llega por UDP desde el puente de Windows '
+                        '(tools/joy_bridge) en vez del nodo joy local'),
+        DeclareLaunchArgument(
             'rviz', default_value='false',
             description='Abrir RViz (solo si hay pantalla)'),
         DeclareLaunchArgument(
@@ -136,13 +140,24 @@ def generate_launch_description():
             package='joy',
             executable='joy_node',
             name='joy_node',
-            condition=IfCondition(LaunchConfiguration('teleop')),
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration('teleop'), "' == 'true' and '",
+                LaunchConfiguration('joy_udp'), "' != 'true'"])),
             parameters=[{
                 'device_id': ParameterValue(
                     LaunchConfiguration('joy_device'), value_type=int),
                 'deadzone': 0.0,        # la zona muerta la aplica el teleop
                 'autorepeat_rate': 20.0,
             }],
+        ),
+        Node(
+            package='starcrawler_teleop',
+            executable='joy_udp_node',
+            name='joy_udp_node',
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration('teleop'), "' == 'true' and '",
+                LaunchConfiguration('joy_udp'), "' == 'true'"])),
+            output='screen',
         ),
         Node(
             package='starcrawler_teleop',

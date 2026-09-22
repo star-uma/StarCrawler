@@ -42,17 +42,18 @@ PRESETS_DEG = (-45.0, 0.0, 45.0, 90.0)
 class Mapeo:
     """Indices de /joy. Verificar con:  ros2 topic echo /joy
 
-    Los valores por defecto son los tipicos de un DualShock 4 en Linux con el
-    nodo `joy`. Si algo no responde, se corrige en config/ds4.yaml sin tocar
-    codigo.
+    Los valores por defecto son los de un DualShock 4 en Linux con el nodo
+    `joy` (driver hid-sony): ejes 0 LX, 1 LY, 2 L2, 3 RX, 4 RY, 5 R2 y la
+    cruceta en 6/7. Ese nodo niega los ejes de SDL: izquierda y arriba dan +1.
+    Si algo no responde, se corrige en config/ds4.yaml sin tocar codigo.
     """
     eje_avance: int = 1
-    eje_giro: int = 2
+    eje_giro: int = 3
     # Los flags normalizan el eje crudo a: avance positivo = stick ARRIBA,
-    # giro positivo = stick a la DERECHA. En Linux el eje Y da -1 arriba (de
-    # ahi el true) y el X da +1 a la derecha (de ahi el false).
-    invertir_avance: bool = True
-    invertir_giro: bool = False
+    # giro positivo = stick a la DERECHA. El nodo joy ya da +1 arriba y +1 a
+    # la izquierda, asi que solo se invierte el giro.
+    invertir_avance: bool = False
+    invertir_giro: bool = True
 
     boton_l1: int = 4
     boton_l2: int = 6
@@ -72,7 +73,7 @@ class Mapeo:
     dpad_eje_x: int = 6
     dpad_eje_y: int = 7
     dpad_y_arriba_positivo: bool = True
-    dpad_x_derecha_positivo: bool = True
+    dpad_x_derecha_positivo: bool = False   # el nodo joy da +1 a la izquierda
     dpad_botones: Sequence[int] = ()
 
     # Deadman opcional: -1 = desactivado

@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'teleop_node = starcrawler_teleop.teleop_node:main',
+            'joy_udp_node = starcrawler_teleop.joy_udp_node:main',
         ],
     },
 )

@@ -65,23 +65,24 @@ def test_reposo_no_manda_nada():
 
 def test_avance_adelante():
     a = Ajustes()
-    s = logica().procesar(ejes(a1=-1.0), botones(), 0.0)   # stick arriba = -1
+    s = logica().procesar(ejes(a1=1.0), botones(), 0.0)   # nodo joy: arriba = +1
     assert s.lineal == pytest.approx(a.max_lineal)
     assert s.angular == pytest.approx(0.0)
 
 
 def test_marcha_atras():
     a = Ajustes()
-    s = logica().procesar(ejes(a1=1.0), botones(), 0.0)
+    s = logica().procesar(ejes(a1=-1.0), botones(), 0.0)
     assert s.lineal == pytest.approx(-a.max_lineal)
 
 
 def test_giro_a_la_derecha_es_angular_negativo():
     """Convencion ROS: angular.z positivo = giro a la izquierda."""
     a = Ajustes()
-    s = logica().procesar(ejes(a2=1.0), botones(), 0.0)
+    # stick derecho horizontal = eje 3; el nodo joy da -1 a la derecha
+    s = logica().procesar(ejes(a3=-1.0), botones(), 0.0)
     assert s.angular == pytest.approx(-a.max_angular)
-    s = logica().procesar(ejes(a2=-1.0), botones(), 0.0)
+    s = logica().procesar(ejes(a3=1.0), botones(), 0.0)
     assert s.angular == pytest.approx(a.max_angular)
 
 
@@ -91,7 +92,7 @@ def test_traccion_y_orugas_a_la_vez():
     """La razon de ser del esquema: conducir mientras bascula una oruga."""
     a = Ajustes()
     lg = logica()
-    s = lg.procesar(ejes(a1=-1.0), botones(4), 0.0)   # avance + L1
+    s = lg.procesar(ejes(a1=1.0), botones(4), 0.0)   # avance + L1
     assert s.lineal == pytest.approx(a.max_lineal)
     assert s.incremento == [1, 1, 0, 0]
 
@@ -133,8 +134,9 @@ def test_cruceta_inclina_el_conjunto():
     # arriba: suben las delanteras -> inclinar adelante
     assert lg.procesar(ejes(a7=1.0), botones(), 0.0).incremento == [1, 1, -1, -1]
     assert lg.procesar(ejes(a7=-1.0), botones(), 0.1).incremento == [-1, -1, 1, 1]
-    assert lg.procesar(ejes(a6=-1.0), botones(), 0.2).incremento == [-1, 1, -1, 1]
-    assert lg.procesar(ejes(a6=1.0), botones(), 0.3).incremento == [1, -1, 1, -1]
+    # cruceta X: el nodo joy da +1 a la izquierda
+    assert lg.procesar(ejes(a6=1.0), botones(), 0.2).incremento == [-1, 1, -1, 1]
+    assert lg.procesar(ejes(a6=-1.0), botones(), 0.3).incremento == [1, -1, 1, -1]
 
 
 def test_cruceta_en_diagonal_no_hace_nada():
@@ -180,14 +182,14 @@ def test_share_es_parada_de_emergencia():
 def test_l3_alterna_velocidad_lenta():
     a = Ajustes()
     lg = logica()
-    s = lg.procesar(ejes(a1=-1.0), botones(11), 0.0)
+    s = lg.procesar(ejes(a1=1.0), botones(11), 0.0)
     assert s.velocidad_lenta
     assert s.lineal == pytest.approx(a.max_lineal * a.factor_lento)
     # mantenerlo pulsado no vuelve a conmutar
-    s = lg.procesar(ejes(a1=-1.0), botones(11), 0.1)
+    s = lg.procesar(ejes(a1=1.0), botones(11), 0.1)
     assert s.velocidad_lenta
     lg.procesar(ejes(), botones(), 0.2)          # soltar
-    s = lg.procesar(ejes(a1=-1.0), botones(11), 0.3)
+    s = lg.procesar(ejes(a1=1.0), botones(11), 0.3)
     assert not s.velocidad_lenta
     assert s.lineal == pytest.approx(a.max_lineal)
 
