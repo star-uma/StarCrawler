@@ -73,9 +73,13 @@ ros2 run micro_ros_setup build_firmware.sh
 ros2 run micro_ros_setup flash_firmware.sh
 ```
 
-Y en el PC de a bordo, el agente:
+Y en el PC de a bordo, el agente. No es un paquete de Humble ni una clave de
+rosdep: se construye una vez con `micro_ros_setup` dentro del mismo workspace:
 
 ```bash
+ros2 run micro_ros_setup create_agent_ws.sh
+ros2 run micro_ros_setup build_agent.sh
+source install/local_setup.bash
 ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/starcrawler -b 921600
 ```
 
