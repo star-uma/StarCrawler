@@ -29,13 +29,14 @@ from sensor_msgs.msg import JointState
 
 from starcrawler_msgs.msg import CrawlerCommand, RobotState
 
-from .sim_core import (
+from starcrawler_common.angulos import (
     N_ORUGAS,
-    RobotSimulado,
     elevacion_a_encoder_deg,
     encoder_a_elevacion_rad,
     es_espejada,
 )
+
+from .sim_core import RobotSimulado
 
 RAD_A_GRADOS = 57.29577951
 

@@ -23,25 +23,11 @@ from rclpy.node import Node
 
 from starcrawler_msgs.msg import RobotState
 
+from starcrawler_common.angulos import elevacion_a_encoder_deg
+
 from .dashboard import Manejador, registrar
 
 RAD_A_GRADOS = 57.29577951
-
-
-def es_espejada(i: int) -> bool:
-    """FL y RR van espejadas, como documenta el TFG."""
-    return i == 1 or i == 2
-
-
-def elevacion_a_encoder_deg(i: int, elevacion_rad: float) -> float:
-    """Radianes de elevacion -> grados de encoder.
-
-    Inverso de lo que hace el firmware. El dashboard dibuja en grados de
-    encoder (180 = oruga horizontal), asi que hay que deshacer la
-    conversion para no tener que tocar el dibujo.
-    """
-    d = elevacion_rad * RAD_A_GRADOS
-    return (180.0 + d) if es_espejada(i) else (180.0 - d)
 
 
 class NodoDashboard(Node):

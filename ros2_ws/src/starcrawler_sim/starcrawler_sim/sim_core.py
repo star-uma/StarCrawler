@@ -16,8 +16,16 @@ es cosa del nodo.
 """
 from __future__ import annotations
 
-import math
 from typing import List, Optional, Sequence, Tuple
+
+# La traduccion de angulos vive en starcrawler_common: estaba
+# copiada aqui y en la GUI, y un error de signo ahi mueve los
+# brazos al reves.
+from starcrawler_common.angulos import (  # noqa: F401
+    es_espejada,
+    elevacion_a_encoder_deg,
+    encoder_a_elevacion_rad,
+)
 
 N_ORUGAS = 4
 
@@ -159,26 +167,3 @@ class RobotSimulado:
         """(angulos_deg, vel_izq_dps, vel_der_dps, seguridad, bits_error)"""
         return (list(self.angulo), self.vel_izq_dps, self.vel_der_dps,
                 self.seguridad, self.bits_error)
-
-
-# --- Conversion de angulos -----------------------------------------------
-
-# OJO: esta conversion vive tambien en el firmware de micro-ROS (app.c) y
-# en starcrawler_gui. Son tres copias de la misma regla; si cambia el
-# convenio hay que tocarlas todas.
-
-def es_espejada(i: int) -> bool:
-    """FL y RR van espejadas, como documenta el TFG."""
-    return i == 1 or i == 2
-
-
-def elevacion_a_encoder_deg(i: int, elevacion_rad: float) -> float:
-    """Radianes de elevacion (+ = brazo levantado) -> grados de encoder."""
-    d = elevacion_rad * 180.0 / math.pi
-    return (180.0 + d) if es_espejada(i) else (180.0 - d)
-
-
-def encoder_a_elevacion_rad(i: int, encoder_deg: float) -> float:
-    """Grados de encoder -> radianes de elevacion."""
-    d = (encoder_deg - 180.0) if es_espejada(i) else (180.0 - encoder_deg)
-    return d * math.pi / 180.0

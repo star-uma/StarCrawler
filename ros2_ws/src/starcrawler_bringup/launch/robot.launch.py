@@ -16,7 +16,7 @@ Uso:
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import (Command, LaunchConfiguration,
+from launch.substitutions import (Command, LaunchConfiguration, PythonExpression,
                                   PathJoinSubstitution)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -37,6 +37,13 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'port', default_value='/dev/starcrawler',
             description='Puerto serie del ESP32 (ver udev/99-starcrawler.rules)'),
+        DeclareLaunchArgument(
+            'micro_ros', default_value='false',
+            description='El ESP32 es nodo ROS 2 nativo: se lanza el agente '
+                        'de micro-ROS en vez del nodo driver'),
+        DeclareLaunchArgument(
+            'micro_ros_baud', default_value='115200',
+            description='Debe coincidir con lo que fijo configure_firmware.sh'),
         DeclareLaunchArgument(
             'sim', default_value='false',
             description='Robot simulado a nivel de topicos, sin hardware ni '
@@ -80,12 +87,26 @@ def generate_launch_description():
             package='starcrawler_driver',
             executable='driver_node',
             name='starcrawler_driver',
-            condition=UnlessCondition(LaunchConfiguration('sim')),
+            condition=UnlessCondition(PythonExpression([
+                "'", LaunchConfiguration('sim'), "' == 'true' or '",
+                LaunchConfiguration('micro_ros'), "' == 'true'"])),
             parameters=[
                 PathJoinSubstitution([driver_share, 'config', 'driver.yaml']),
                 {'simulate': ParameterValue(simulate, value_type=bool),
                  'port': ParameterValue(port, value_type=str)},
             ],
+            output='screen',
+        ),
+        # Agente de micro-ROS. Con el firmware nuevo el ESP32 publica y se
+        # suscribe por si mismo, asi que el nodo driver sobra: el agente
+        # solo hace de pasarela entre el puerto serie y el grafo.
+        Node(
+            package='micro_ros_agent',
+            executable='micro_ros_agent',
+            name='micro_ros_agent',
+            condition=IfCondition(LaunchConfiguration('micro_ros')),
+            arguments=['serial', '--dev', LaunchConfiguration('port'),
+                       '-b', LaunchConfiguration('micro_ros_baud')],
             output='screen',
         ),
         # Robot simulado: habla los mismos topicos que hablara el ESP32

@@ -6,9 +6,6 @@ from starcrawler_sim.sim_core import (
     RobotSimulado,
     VEL_ELEVACION_DPS,
     rate_limit,
-    es_espejada,
-    elevacion_a_encoder_deg,
-    encoder_a_elevacion_rad,
     ERR_WATCHDOG,
     ERR_CAN,
     ERR_ENCODER,
@@ -193,30 +190,6 @@ def test_sin_averias_y_con_consignas_no_hay_errores():
     r.consigna_traccion(0.0, 0.0)
     r.avanzar(DT)
     assert r.bits_error == 0
-
-
-# --- Conversion de angulos -------------------------------------------------
-
-def test_fl_y_rr_son_las_espejadas():
-    assert [es_espejada(i) for i in range(4)] == [False, True, True, False]
-
-
-def test_horizontal_es_180_en_las_cuatro():
-    assert [elevacion_a_encoder_deg(i, 0.0) for i in range(4)] == [180.0] * 4
-
-
-def test_vertical_arriba_coincide_con_el_tfg():
-    """El TFG documenta {90, 270, 270, 90} para {FR, FL, RR, RL}."""
-    noventa = math.pi / 2
-    obtenido = [round(elevacion_a_encoder_deg(i, noventa)) for i in range(4)]
-    assert obtenido == [90, 270, 270, 90]
-
-
-def test_la_conversion_va_y_vuelve():
-    for i in range(4):
-        for rad in (-1.2, -0.3, 0.0, 0.5, 1.4):
-            ida = elevacion_a_encoder_deg(i, rad)
-            assert math.isclose(encoder_a_elevacion_rad(i, ida), rad, abs_tol=1e-12)
 
 
 # --- Integracion -----------------------------------------------------------
