@@ -3,7 +3,7 @@
 El ESP32 deja de ser un esclavo con protocolo serie propio y pasa a ser un
 **nodo ROS 2 nativo**, igual que hace Donatello (`star-uma/TFG_MARIA_JOSE`).
 
-> ⚠️ **Nada de esto se ha compilado nunca.** Ver "Estado" al final.
+> ⚠️ **Compila, pero no se ha probado en hardware.** Ver "Estado" al final.
 
 ## Qué cambia
 
@@ -80,26 +80,33 @@ rosdep: se construye una vez con `micro_ros_setup` dentro del mismo workspace:
 ros2 run micro_ros_setup create_agent_ws.sh
 ros2 run micro_ros_setup build_agent.sh
 source install/local_setup.bash
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/starcrawler -b 921600
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/starcrawler -b 115200
 ```
+
+> 115200 es lo que lleva grabado el transporte serie de `freertos_apps`
+> (`microros_transports.c`), y no se cambia desde la app ni desde menuconfig.
+> Es también el valor por defecto de `micro_ros_baud` en `robot.launch.py`.
 
 > El paso 3 es el que más se olvida. Sin `starcrawler_msgs` dentro de
 > `mcu_ws`, la compilación falla al no encontrar los tipos.
 
 ## Versiones
 
-Escrito contra **ESP-IDF v4.4**, que es lo que usa el camino
-`freertos esp32` de `micro_ros_setup`. Las APIs sensibles a la versión están
-las tres en `hw.c` y marcadas:
+`micro_ros_setup` (rama humble, ruta `freertos esp32`) construye con
+**ESP-IDF v4.1**, no con la 4.4 como se suponía al escribir esto. El código
+sigue usando los nombres de la 4.4 y las diferencias se traducen en un único
+sitio, `idf_compat.h`:
 
-| API | v4.4 (este código) | Otras versiones |
+| Qué | 4.4 (nombres del código) | 4.1 (lo que hay) |
 |---|---|---|
-| CAN | `driver/twai.h` | `driver/can.h` en IDF < 4.2 (lo que usa Donatello) |
-| Timer | `driver/timer.h` | `driver/gptimer.h` en IDF 5.x |
-| I2C | `driver/i2c.h` | `driver/i2c_master.h` en IDF 5.2+ |
+| CAN | `driver/twai.h`, `twai_*` | `driver/can.h`, `can_*` — mismo driver, nombre antiguo |
+| Espera en µs | `esp_rom_delay_us` (`esp_rom_sys.h`) | `ets_delay_us` (`esp32/rom/ets_sys.h`) |
+| I2C | `i2c_master_write_to_device`, `i2c_master_write_read_device` | no existen: se implementan sobre la API de comandos |
+| Timer | `timer_isr_callback_add` | existe también en 4.1 |
 
-Si el entorno resulta ser otra versión, son esos tres bloques los que hay que
-tocar. El resto del código no depende de la versión.
+Si el laboratorio pasa a una IDF más nueva (≥ 4.4), `idf_compat.h` se vuelve
+transparente. En IDF 5.x cambian además el timer (`gptimer`) y el I2C
+(`i2c_master`), y eso sí habría que portarlo.
 
 ## Qué cambia en el lado del PC
 
@@ -112,17 +119,19 @@ en vez del nodo driver.
 
 ## Estado
 
-**Sin verificar de ninguna manera.** Escrito sin acceso al entorno de
-compilación, así que no ha pasado ni por el compilador.
+**Compila** (22-09-2026) con la cadena real: `micro_ros_setup` humble →
+ESP-IDF v4.1 → `starcrawler_app.bin` de 459 KB, sin errores ni avisos en los
+ficheros de la app. Lo que hubo que tocar en la primera compilación:
 
-Lo único comprobado:
+- Las APIs de ESP-IDF que no existen en la 4.1 (`idf_compat.h`, ver arriba).
+- `app.c` trataba como secuencias los campos que en el `.msg` son arrays fijos
+  (`float64[4]`, `int8[4]`, `bool[4]`): en C son arrays planos dentro del
+  struct, sin `.data/.size/.capacity` ni memoria que reservar. Solo las
+  secuencias de `JointState` (`name`, `position`) necesitan buffers.
+- Faltaba `rosidl_runtime_c/string_functions.h`.
 
-- `control_core.c` compila como C11 con `-Wall -Wextra` sin avisos
-- La estructura sigue la de `control_app/app.c` de Donatello
-
-Lo que hay que esperar en la primera compilación: nombres de API que hayan
-cambiado de versión, y los tipos de los mensajes propios. Son errores de
-compilación, ruidosos y rápidos de arreglar — no fallos silenciosos.
+**Sin probar en hardware.** Que compile no dice nada del CAN, los steppers ni
+los encoders: eso solo se ve con el robot sobre tacos.
 
 **Antes de flashearlo al robot**, que funcione con el robot sobre tacos y
 habiendo pasado la puesta en marcha de `test/target/`.

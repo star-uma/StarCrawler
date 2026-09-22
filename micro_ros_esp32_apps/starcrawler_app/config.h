@@ -19,7 +19,7 @@
 
 /* ═══ ENLACE SERIE CON EL PC ══════════════════════════════════════════════ */
 
-#define SERIE_BAUDIOS 921600
+/* El baudio lo fija el transporte de freertos_apps: 115200, no configurable. */
 /* Sin consigna valida en este tiempo -> estado seguro. Mas apretado que los
  * 500 ms del enlace WiFi porque el USB es local y va a 50 tramas/s. */
 #define WATCHDOG_TIMEOUT_MS 300

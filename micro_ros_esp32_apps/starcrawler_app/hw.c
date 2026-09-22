@@ -5,17 +5,8 @@
  * Las firmas no cambian (ver hw.h), asi que control_core.c se reutiliza
  * sin tocarlo.
  *
- * VERSION DE ESP-IDF: escrito contra la v4.4, que es lo que usa el
- * camino freertos/esp32 de micro_ros_setup. Las tres APIs elegidas son
- * las de esa rama:
- *   - driver/twai.h    CAN interno (en IDF < 4.2 se llamaba driver/can.h,
- *                      que es lo que usa Donatello)
- *   - driver/timer.h   timer de grupo (en IDF 5.x pasa a gptimer)
- *   - driver/i2c.h     API legacy (en IDF 5.2+ pasa a i2c_master)
- * Si el entorno resulta ser otra version, estas tres son las que hay
- * que tocar; el resto del fichero no depende de la version.
- *
- * SIN VERIFICAR: no se ha compilado nunca.
+ * VERSION DE ESP-IDF: escrito con los nombres de la 4.4; las diferencias
+ * con la 4.1 (la que trae micro_ros_setup humble) van en idf_compat.h.
  */
 
 #include "hw.h"
@@ -27,11 +18,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-#include "driver/twai.h"
 #include "driver/timer.h"
-#include "driver/i2c.h"
 #include "esp_timer.h"
-#include "esp_rom_sys.h"
+#include "idf_compat.h"
 
 /* ==================================================================== */
 /*  Utilidades                                                          */

@@ -31,6 +31,7 @@
 #include <sensor_msgs/msg/joint_state.h>
 #include <starcrawler_msgs/msg/crawler_command.h>
 #include <starcrawler_msgs/msg/robot_state.h>
+#include <rosidl_runtime_c/string_functions.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -39,6 +40,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
+#include "idf_compat.h"
 
 #include "config.h"
 #include "control_core.h"
@@ -178,9 +180,9 @@ static void cb_crawler(const void *msgin) {
         /* increment viene en convenio de elevacion (+1 sube el brazo).
          * El firmware trabaja en grados de encoder, donde subir el brazo
          * puede significar aumentar o disminuir segun el espejado. */
-        const int8_t inc = m->increment.data[i];
+        const int8_t inc = m->increment[i];
         consignaCmd[i] = esEspejada(i) ? inc : (int8_t)(-inc);
-        consignaObjDeg[i] = elevacionAEncoderDeg(i, (float)m->target.data[i]);
+        consignaObjDeg[i] = elevacionAEncoderDeg(i, (float)m->target[i]);
     }
     portEXIT_CRITICAL(&mux);
 
@@ -342,8 +344,8 @@ static void TaskMicroROS(void *arg) {
 
         for (int i = 0; i < CC_NUM_ORUGAS; i++) {
             const double elev = (double)encoderAElevacionRad(i, ang[i]);
-            msg_estado.crawler_angle.data[i] = elev;
-            msg_estado.encoder_ok.data[i]    = ok[i];
+            msg_estado.crawler_angle[i] = elev;
+            msg_estado.encoder_ok[i]    = ok[i];
             msg_joints.position.data[i]      = elev;
         }
         msg_estado.track_speed_left  = (double)(vIzq * GRADOS_A_RAD);
@@ -383,23 +385,14 @@ static void TaskWatchdog(void *arg) {
 
 /* --- Reserva de memoria de los mensajes ------------------------------ */
 
-/* micro-ROS no usa asignacion dinamica: los arrays de los mensajes hay
- * que respaldarlos con memoria estatica antes de publicar. */
-static double  buf_angulo[CC_NUM_ORUGAS];
-static bool    buf_encoder_ok[CC_NUM_ORUGAS];
+/* micro-ROS no usa asignacion dinamica: las secuencias de JointState hay
+ * que respaldarlas con memoria estatica antes de publicar. Los arrays
+ * fijos de los mensajes propios ([4] en el .msg) van dentro del struct. */
 static double  buf_joint_pos[CC_NUM_ORUGAS];
-static int8_t  buf_increment[CC_NUM_ORUGAS];
-static double  buf_target[CC_NUM_ORUGAS];
 static rosidl_runtime_c__String buf_nombres[CC_NUM_ORUGAS];
 
 static void prepararMensajes(void) {
     starcrawler_msgs__msg__RobotState__init(&msg_estado);
-    msg_estado.crawler_angle.data     = buf_angulo;
-    msg_estado.crawler_angle.size     = CC_NUM_ORUGAS;
-    msg_estado.crawler_angle.capacity = CC_NUM_ORUGAS;
-    msg_estado.encoder_ok.data        = buf_encoder_ok;
-    msg_estado.encoder_ok.size        = CC_NUM_ORUGAS;
-    msg_estado.encoder_ok.capacity    = CC_NUM_ORUGAS;
 
     sensor_msgs__msg__JointState__init(&msg_joints);
     msg_joints.position.data     = buf_joint_pos;
@@ -414,12 +407,6 @@ static void prepararMensajes(void) {
     msg_joints.name.capacity = CC_NUM_ORUGAS;
 
     starcrawler_msgs__msg__CrawlerCommand__init(&msg_crawler);
-    msg_crawler.increment.data     = buf_increment;
-    msg_crawler.increment.size     = CC_NUM_ORUGAS;
-    msg_crawler.increment.capacity = CC_NUM_ORUGAS;
-    msg_crawler.target.data        = buf_target;
-    msg_crawler.target.size        = CC_NUM_ORUGAS;
-    msg_crawler.target.capacity    = CC_NUM_ORUGAS;
 
     geometry_msgs__msg__Twist__init(&msg_cmd_vel);
 }
