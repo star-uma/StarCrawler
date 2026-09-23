@@ -22,6 +22,7 @@ import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import TransformStamped, Quaternion
@@ -70,8 +71,10 @@ class OdometriaOrugas(Node):
         self.pub_odom = self.create_publisher(Odometry, 'odom', 50)
         self.tf_broadcaster = TransformBroadcaster(self)
 
+        # El ESP32 publica en best-effort: una suscripcion fiable no casa
         self.create_subscription(
-            RobotState, 'starcrawler/state', self.cb_estado, 10)
+            RobotState, 'starcrawler/state', self.cb_estado,
+            qos_profile_sensor_data)
 
         self.ultimo = self.get_clock().now()
         self.create_timer(1.0 / rate, self.actualizar)

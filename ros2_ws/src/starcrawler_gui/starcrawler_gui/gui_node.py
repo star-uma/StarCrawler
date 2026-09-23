@@ -22,6 +22,7 @@ import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 from starcrawler_msgs.msg import RobotState
 
@@ -44,8 +45,10 @@ class NodoDashboard(Node):
 
         puerto = self.get_parameter('http_port').value
 
+        # El ESP32 publica en best-effort: una suscripcion fiable no casa
         self.create_subscription(
-            RobotState, 'starcrawler/state', self.cb_estado, 10)
+            RobotState, 'starcrawler/state', self.cb_estado,
+            qos_profile_sensor_data)
 
         self.servidor = ThreadingHTTPServer(('', puerto), Manejador)
         threading.Thread(target=self.servidor.serve_forever,
