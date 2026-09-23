@@ -7,7 +7,8 @@
     Interfaz web de operacion: dibuja el robot con las cuatro orugas en su
     angulo real, velocidades, errores decodificados y graficas. Es el
     dashboard de la rama standalone leyendo de /starcrawler/state en vez
-    del puerto serie.
+    del puerto serie. En /3d, el robot moviendose por el plano a partir de
+    /odom, /joint_states y el URDF.
   </description>
   <maintainer email="mariogj.03@uma.es">Mario Garcia Jimenez</maintainer>
   <license>MIT</license>
@@ -15,11 +16,16 @@
   <depend>rclpy</depend>
   <depend>starcrawler_common</depend>
   <depend>starcrawler_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
+  <!-- test_urdf_modelo expande el xacro real del robot -->
+  <test_depend>xacro</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
