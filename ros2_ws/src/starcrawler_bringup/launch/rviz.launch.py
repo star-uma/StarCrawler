@@ -28,10 +28,11 @@ def generate_launch_description():
             executable='robot_state_publisher',
             parameters=[{'robot_description': robot_description}],
         ),
+        # Marco fijo odom, como robot.launch.py: se ve el robot desplazarse
         Node(
             package='rviz2',
             executable='rviz2',
             arguments=['-d', PathJoinSubstitution(
-                [descripcion, 'rviz', 'starcrawler.rviz'])],
+                [descripcion, 'rviz', 'plano.rviz'])],
         ),
     ])
