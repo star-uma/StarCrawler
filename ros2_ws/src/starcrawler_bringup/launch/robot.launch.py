@@ -10,6 +10,7 @@ Levanta todo lo que corre en el PC de a bordo:
 Uso:
     ros2 launch starcrawler_bringup robot.launch.py
     ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true
+    ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true teleop:=false
     ros2 launch starcrawler_bringup robot.launch.py port:=/dev/ttyUSB0
     ros2 launch starcrawler_bringup robot.launch.py teleop:=false   # solo driver
 """
@@ -191,12 +192,14 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('gui')),
             output='screen',
         ),
+        # Marco fijo odom: el robot se desplaza por la rejilla. El
+        # starcrawler.rviz fija base_footprint y sirve para view_model.
         Node(
             package='rviz2',
             executable='rviz2',
             condition=IfCondition(LaunchConfiguration('rviz')),
             arguments=['-d', PathJoinSubstitution(
-                [descripcion, 'rviz', 'starcrawler.rviz'])],
+                [descripcion, 'rviz', 'plano.rviz'])],
         ),
     ]
 
