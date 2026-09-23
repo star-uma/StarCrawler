@@ -46,7 +46,7 @@ no se podía instalar ROS 2. Concretamente:
 | `micro_ros_esp32_apps/starcrawler_app/` | **Compila** (22-09-2026) con `micro_ros_setup` humble → ESP-IDF **v4.1** (no 4.4): `starcrawler_app.bin` 459 KB, 0 errores/avisos. Arreglos: `idf_compat.h` y arrays fijos del `.msg` (`c16ad62`). Agente micro-ROS compilado. **Sin flashear ni probar** |
 | Los 101 tests de lógica pura | **`colcon test`: 101/101** (22-09-2026). Los de lint (flake8/pep257/copyright) se declaran pero no se ejecutan |
 | Robot simulado | **Levanta**: sim → odometría → GUI en `:8000`; `/odom` avanza al publicar `/cmd_vel` (22-09-2026) |
-| ESP32 real con micro-ROS | **Funciona el camino completo** (22-09-2026, ESP32 DevKit V1 pelado por usbipd): agente ↔ nodo `starcrawler_esp32` ↔ odometría/GUI. Estado correcto sin hardware (`error_bits` 111). Telemetría a **49 Hz** (best-effort + transporte a 921600 desde la app, `fbf4e5a`/`add9179`). Reconexión automática si el agente se reinicia (ping, 5 s) |
+| ESP32 real con micro-ROS | **Funciona el camino completo** (22-09-2026, ESP32 DevKit V1 pelado por usbipd): agente ↔ nodo `starcrawler_esp32` ↔ odometría/GUI. Estado correcto sin hardware (`error_bits` 111). Telemetría a **49 Hz** (best-effort + transporte a 921600 desde la app, `fbf4e5a`/`add9179`). Reconexión automática si el agente se reinicia (ping, 5 s). **Ojo**: los 49 Hz se midieron con `ros2 topic hz`, que adapta el QoS; la GUI y la odometría se suscribían en fiable y con el ESP32 en best-effort no recibían nada. Arreglado en `db76c03`, **sin comprobar con el ESP32** |
 | Mando DS4 → teleop | **Verificado en el banco de Windows** (22-09-2026): DS4 por Bluetooth → `tools/joy_bridge` (pygame→UDP) → `joy_udp_node` → teleop → twist_mux → sim. Stick izq. arriba = avance, stick der. derecha = `angular.z` negativo, X = preset. El mapeo de `ds4.yaml` estaba mal para el nodo `joy` (giro en el eje de L2, signos al revés): corregido (`7fd599e`) |
 | Cualquier cosa con motores, encoders o CAN | Nada verificado en hardware |
 
@@ -188,26 +188,42 @@ Instrucciones completas en `micro_ros_esp32_apps/starcrawler_app/README.md`.
 
 ---
 
-### Tarea 6 — interfaz 3D para ver el robot moverse por el plano (pedida por Mario, 22-09-2026)
+### Tarea 6 — vista 3D del robot moviéndose por el plano — ESCRITA 23-09-2026, SIN PROBAR CON ROS
 
-Mario quiere una GUI 3D en la que se vea el robot desplazándose por el plano
-(no solo la vista lateral 2D de los brazos que tiene la GUI web actual). Los
-datos ya existen en el grafo: `/odom` y la TF `odom→base_link` para la
-posición, `/joint_states` para los brazos y el URDF de `starcrawler_description`
-para la geometría (con primitivas; las mallas CAD siguen bloqueadas).
+Mario eligió **los dos caminos**, y están los dos:
 
-Dos caminos razonables, a decidir con él antes de empezar:
+- **RViz**: `plano.rviz`, con marco fijo `odom`, el rastro de `/odom` y la
+  cámara siguiendo al robot. Lo usan `robot.launch.py` (`rviz:=true`) y
+  `rviz.launch.py`. El `starcrawler.rviz` de antes fijaba `base_footprint`: el
+  robot se quedaba en el centro y solo se movían los brazos. Sigue para
+  `view_model.launch.py`.
+- **Web 3D** en `http://localhost:8000/3d` (`starcrawler_gui`, three.js). El
+  modelo no está escrito en la página: sale de `/robot_description`, traducido
+  por `urdf_modelo.py`, así que dibuja lo mismo que RViz y con los mismos
+  signos.
 
-- **RViz2** con `rviz:=true`: ya está en el launch, muestra URDF + TF + odometría
-  sin escribir código. En WSL va por WSLg (`LIBGL_ALWAYS_SOFTWARE=1` si sale en
-  negro). Es lo más rápido para verlo hoy.
-- **Vista 3D dentro de la GUI web** (`starcrawler_gui`, three.js): sin depender
-  de RViz ni de un escritorio Linux, accesible desde cualquier navegador de la
-  red, y coherente con la telemetría que ya pinta. Más trabajo, pero es lo que
-  encaja con "GUI" tal como la usa el proyecto.
+Qué está verificado y qué no:
 
-Empezar comprobando qué publica ya el simulador (`/odom`, `/tf`,
-`/joint_states`) y que el URDF carga en `robot_state_publisher`.
+- `urdf_modelo.py` y la página: 14 tests puros que pasan. El test que expande
+  el xacro real **se salta sin `xacro`**; con ROS cargado tiene que correr.
+- La página se ha visto en un navegador **con datos simulados**, sin ROS: el
+  robot se dibuja, se desplaza, el rastro sale continuo y los signos de los
+  brazos cuadran (positivo = levantado).
+- **Sin probar**: el `gui_node` real con las tres suscripciones nuevas y
+  `plano.rviz` abierto en RViz. Primera prueba:
+
+```bash
+ros2 launch starcrawler_bringup robot.launch.py sim:=true gui:=true rviz:=true teleop:=false
+```
+
+Con eso, publicar un `/cmd_vel` y ver que el robot avanza en las dos vistas a
+la vez. Si RViz lo pinta bien y la web no, el fallo está en la web.
+
+Arreglado de paso, porque rompía la vista con el ESP32 real: la GUI y la
+odometría se suscribían a `starcrawler/state` en modo fiable, y desde
+`fbf4e5a` el ESP32 publica en best-effort. No casaban y no les llegaba nada.
+`ros2 topic hz` no lo delata porque adapta el QoS solo. Y la odometría ahora
+deja de integrar si pasan 0,5 s sin estado.
 
 ## 5. Decisiones ya cerradas — no las vuelvas a abrir
 

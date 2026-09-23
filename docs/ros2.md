@@ -234,6 +234,22 @@ ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true gui:=true
 Con eso se levanta la cadena completa sin nada conectado: mando, `twist_mux`,
 robot, odometría, interfaz web y RViz.
 
+Para ver el robot **desplazándose por el plano** hay dos vistas, y las dos
+dibujan el mismo URDF:
+
+| Vista | Dónde | Qué hace falta |
+|---|---|---|
+| RViz | `rviz:=true` (o `rviz.launch.py` desde otro PC) | ROS 2 y escritorio |
+| Web 3D | `http://<robot>:8000/3d` | Solo un navegador |
+
+RViz usa `plano.rviz`: marco fijo `odom`, rastro de `/odom` y la cámara
+siguiendo al robot. La web 3D es la misma idea en `starcrawler_gui`, con
+three.js. **Sin internet en el equipo que la abre necesita la copia local** de
+three.js: ver `starcrawler_gui/starcrawler_gui/static/README.md`.
+
+El modelo es cinemático: al bajar una oruga la punta atraviesa el suelo, en
+vez de levantar el chasis como pasaría de verdad. Pasa igual en las dos.
+
 Se pueden simular averías para ver cómo responde el grafo con el robot
 degradado, sin desconectar nada de verdad:
 
