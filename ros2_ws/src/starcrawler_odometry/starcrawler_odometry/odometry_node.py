@@ -54,6 +54,8 @@ class OdometriaOrugas(Node):
         self.declare_parameter('base_frame', 'base_footprint')
         self.declare_parameter('publish_tf', True)
         self.declare_parameter('rate_hz', 50.0)
+        # Sin estado en este tiempo se integra velocidad cero
+        self.declare_parameter('timeout_estado_s', 0.5)
 
         self.radio = self.get_parameter('wheel_radius').value
         self.separacion = self.get_parameter('track_separation').value
@@ -61,6 +63,9 @@ class OdometriaOrugas(Node):
         self.base_frame = self.get_parameter('base_frame').value
         self.publicar_tf = self.get_parameter('publish_tf').value
         rate = self.get_parameter('rate_hz').value
+        self.timeout_ns = int(
+            self.get_parameter('timeout_estado_s').value * 1e9)
+        self.t_estado = None
 
         self.x = 0.0
         self.y = 0.0
@@ -89,11 +94,19 @@ class OdometriaOrugas(Node):
         self.v, self.w = velocidades_del_robot(
             msg.track_speed_left, msg.track_speed_right,
             self.radio, self.separacion)
+        self.t_estado = self.get_clock().now()
 
     def actualizar(self):
         ahora = self.get_clock().now()
         dt = (ahora - self.ultimo).nanoseconds / 1e9
         self.ultimo = ahora
+
+        # Si se pierde el enlace en marcha, la ultima velocidad seguiria
+        # integrandose y /odom avanzaria para siempre
+        if (self.t_estado is not None
+                and (ahora - self.t_estado).nanoseconds > self.timeout_ns):
+            self.v = 0.0
+            self.w = 0.0
 
         self.x, self.y, self.th = integrar(
             self.x, self.y, self.th, self.v, self.w, dt)

@@ -17,6 +17,8 @@ starcrawler_odometry:
     odom_frame: odom
     base_frame: base_footprint
     rate_hz: 50.0
+    # Sin /starcrawler/state en este tiempo se deja de integrar
+    timeout_estado_s: 0.5
 
     # Con orugas el yaw deriva rapido por el deslizamiento de las bandas.
     # Si algun dia se fusiona con IMU o LiDAR, ese filtro publicara la TF
