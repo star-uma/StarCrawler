@@ -11,10 +11,11 @@ orden.
 
 ## Lo que hay que tener presente siempre
 
-**Casi nada está verificado.** Los nueve paquetes de `ros2_ws/` no se han
-compilado nunca, la app de `micro_ros_esp32_apps/` tampoco, y no hay nada
-probado contra el robot. Buena parte de este código se escribió en un ordenador
-donde no se podía instalar ROS 2.
+**Nada está probado contra el robot.** El workspace compila, los tests pasan y
+el ESP32 habla micro-ROS en el banco, pero motores, encoders y CAN no se han
+verificado nunca. Y buena parte del código se escribió en un ordenador donde no
+se podía instalar ROS 2: la tabla de la sección 2 de `README-CLAUDE.md` dice qué
+se ha ejecutado de verdad y qué no.
 
 Que un fichero exista y esté bien razonado no significa que funcione. Antes de
 decir que algo va, comprueba si se ha ejecutado de verdad o solo se ha escrito.
