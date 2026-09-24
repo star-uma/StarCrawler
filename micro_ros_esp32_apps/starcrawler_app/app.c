@@ -77,6 +77,10 @@
 #define PING_TIMEOUT_MS     20
 #define PING_FALLOS_MAX     5
 
+/* Sin hora del agente los mensajes salen con sello 0 y robot_state_publisher
+ * descarta todos los /joint_states: sin TF de las orugas. La hora se
+ * resincroniza en cada ping: acota el error aunque el reloj del PC derive. */
+
 #define RCCHECK(fn) { rcl_ret_t rc_ = fn; if (rc_ != RCL_RET_OK) { \
     vTaskDelay(pdMS_TO_TICKS(100)); esp_restart(); } }
 #define RCNOCHECK(fn) { rcl_ret_t rc_ = fn; (void)rc_; }
@@ -345,6 +349,7 @@ static void TaskMicroROS(void *arg) {
         if (++ciclos % PING_CADA_CICLOS == 0) {
             if (rmw_uros_ping_agent(PING_TIMEOUT_MS, 1) == RMW_RET_OK) {
                 fallosPing = 0;
+                RCNOCHECK(rmw_uros_sync_session(PING_TIMEOUT_MS));
             } else if (++fallosPing >= PING_FALLOS_MAX) {
                 liberarTraccion();
                 steppers_pararTodos();
@@ -380,6 +385,11 @@ static void TaskMicroROS(void *arg) {
         msg_estado.error_bits     = err;
         msg_estado.frames_ok      = 0;       /* sin protocolo serie propio */
         msg_estado.frames_crc_error = 0;
+
+        const int64_t ns = rmw_uros_epoch_nanos();
+        msg_estado.header.stamp.sec     = (int32_t)(ns / 1000000000LL);
+        msg_estado.header.stamp.nanosec = (uint32_t)(ns % 1000000000LL);
+        msg_joints.header.stamp = msg_estado.header.stamp;
 
         RCNOCHECK(rcl_publish(&pub_estado, &msg_estado, NULL));
         RCNOCHECK(rcl_publish(&pub_joints, &msg_joints, NULL));
@@ -476,6 +486,7 @@ void appMain(void *argument) {
 
     allocator = rcl_get_default_allocator();
     RCCHECK(rclc_support_init(&soporte, 0, NULL, &allocator));
+    RCNOCHECK(rmw_uros_sync_session(1000));
     RCCHECK(rclc_node_init_default(&nodo, "starcrawler_esp32", "", &soporte));
 
     /* Telemetria best-effort, como las suscripciones: sobre serie a

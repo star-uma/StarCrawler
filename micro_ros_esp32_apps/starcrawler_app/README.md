@@ -149,6 +149,13 @@ la vez durante 30 s en régimen. En esa ventana hubo un hueco aislado de ~3 s en
 ambos tópicos, sin determinar si viene del firmware o del camino
 USB→usbipd→WSL del banco; comprobar en el PC de a bordo.
 
+**Hora**: el ESP32 sincroniza con el agente (`rmw_uros_sync_session`) al
+arrancar y en cada ping, y sella `/starcrawler/state` y `/joint_states` con
+`rmw_uros_epoch_nanos()`. Sin sello (0), `robot_state_publisher` descartaba
+todos los `/joint_states`: no habia TF de las orugas y RViz pintaba el modelo
+en rojo (la web 3D no lo nota porque no usa TF). Medido (24-09): sello a
+[-78, +8] ms de la hora del PC, recolocado en <1 s tras un salto del reloj.
+
 CAN, steppers y encoders siguen **sin verificar**: eso solo se ve con el robot
 sobre tacos.
 
