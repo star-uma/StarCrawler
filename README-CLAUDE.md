@@ -38,9 +38,9 @@ contrastarlo con el código.
 | Workspace `ros2_ws/` | Verificado: `colcon build` limpio y 101/101 tests (22-09, WSL Ubuntu 22.04 + Humble). Los tests de lint se declaran pero no corren |
 | Robot simulado | Verificado: sim → odometría → GUI en `:8000` (22-09) |
 | App de micro-ROS | Verificado con un ESP32 **sin nada conectado** (22-09): sesión con el agente, `error_bits` 111 (encoders + CAN + watchdog), ~49 Hz a 921600, reconexión en 5 s si el agente se reinicia. ESP-IDF **4.1** (la de `micro_ros_setup` humble), con `idf_compat.h` |
-| GUI y odometría con el ESP32 | **Sin verificar.** Se suscribían en fiable y el ESP32 publica en best-effort: no recibían nada. Arreglado en `db76c03`. Los 49 Hz se midieron con `ros2 topic hz`, que adapta el QoS y no lo delató |
+| GUI y odometría con el ESP32 | Verificado (24-09) contra el ESP32 real: una suscripción fiable recibe 0 mensajes (rclpy avisa `incompatible policy: RELIABILITY`) y una best-effort ~50 Hz; odometría y GUI están en best-effort y la GUI marca `fuente: ros2 · 50 paq/s` sin simulador. **`ros2 topic echo /odom` no sirve para comprobarlo**: la odometría publica por temporizador aunque no le llegue estado |
 | Mando DS4 | Verificado en Windows por el puente UDP (22-09). El mapeo de `ds4.yaml` se corrigió en `7fd599e`. **Sin probar con el nodo `joy` real** del mini PC |
-| Vistas 3D (tarea 6) | Escritas; tests y navegador con datos simulados. **Sin probar con ROS** |
+| Vistas 3D (tarea 6) | Verificado en Humble (24-09): con el simulador, RViz (`plano.rviz`) y la web `/3d` a la vez; tras 8 s de `/cmd_vel` en curva las dos marcan x = 0,63 m, y = 0,97 m, rumbo 117°. 116/116 tests, 0 saltados. Con el ESP32, RViz pintaba el modelo en rojo: `/joint_states` salía con sello 0 y `robot_state_publisher` lo descartaba todo. Arreglado en `791080a` (hora sincronizada con el agente) |
 | Motores, encoders, CAN | **Nada verificado en hardware** |
 
 ---
@@ -66,6 +66,16 @@ Trampas ya encontradas:
 
 - **`rosdep` se cuelga sin avisar** esperando la contraseña de `sudo`.
   Lanzarlo desde una terminal interactiva o con `wsl -u root`.
+- **El reloj del WSL va a ~0,92× entre ajustes** y Hyper-V lo corrige a saltos
+  de 2–3 s (medido el 24-09 con marcas de hora de Windows por UDP). Todo lo que
+  mide tiempo dentro del WSL sale falseado: `ros2 topic hz` da ~54 Hz para algo
+  que va a 50, y la odometría integra con un `dt` corto. Reiniciar el WSL no lo
+  arregla. La fuente de reloj es `tsc`; probar `hyperv_clocksource_tsc_page` es
+  decisión de Mario. En el mini PC no aplica.
+- **Tras reconectar el USB, el ESP32 puede quedarse en modo descarga** por el
+  auto-reset del DevKit, y el agente no ve sesión. Resetear en modo ejecución:
+  `esptool.py --chip esp32 --port /dev/ttyUSB0 --before default_reset --after
+  hard_reset chip_id` (con el entorno de ESP-IDF cargado).
 - **GitHub por HTTPS falla con el protocolo v2 de git** en esa red ("expected
   flush after ref listing"). Rompe `git submodule`, `vcs import` y la
   compilación del agente. Arreglo: `git config --global protocol.version 0`.
@@ -80,6 +90,8 @@ Trampas ya encontradas:
   tarea 7.
 - **Tareas 2 a 5** (22-09): instalar y compilar, los tests, el robot simulado y
   la app de micro-ROS. Ver la tabla de la sección 2.
+- **Tareas 6 y 7** (24-09): vistas del plano en Humble y Jazzy completo en
+  paralelo. Resultado al final de la tarea 7.
 
 ### Tarea 6 — probar las vistas del plano con ROS
 
@@ -145,6 +157,40 @@ Pasos:
 Al acabar, dejar aquí una tabla Humble frente a Jazzy paso por paso
 (funciona / con avisos / roto y qué se tocó), la versión de ESP-IDF y cuánto
 llevó, y proponerle a Mario un resumen para la #15.
+
+#### Resultado (24-09-2026, Claude)
+
+| Paso | Humble · Ubuntu 22.04 | Jazzy · Ubuntu 24.04 | Qué se tocó |
+|---|---|---|---|
+| Distro | ya existía | `wsl --install` sin problemas; el usuario lo crea Mario | — |
+| Clonar desde `/mnt/c` | funciona | git se niega ("dubious ownership") | `safe.directory` en el `.gitconfig` (entorno) |
+| `instalar_pc_abordo.sh` | **roto**: nunca había llegado al final | roto igual | `a6f429e` (sin `+x`) y `c6c160e` (con `set -u` moría al cargar ROS). Arreglado, completa en las dos |
+| ROS desktop | ya instalado | ~7 min | — |
+| `colcon build` limpio | 30,5 s, 0 avisos | 34,9 s, 0 avisos (no salen los de setuptools) | — |
+| `colcon test` | 116/116, 0 saltados | 116/116, 0 saltados | — |
+| Tarea 6: RViz + web 3D | funciona | funciona; RViz sale por **Wayland** (en 24.04 con systemd X11 no llega a WSLg) | — |
+| Mando → teleop → `twist_mux` | funciona | **roto**: `twist_mux` 4.5 usa `TwistStamped` por defecto | `6b168fe` (`use_stamped: false`; Humble lo ignora, probado) |
+| `micro_ros_setup` | ESP-IDF **v4.1** | ESP-IDF **v4.1** también | faltaban `gperf` y compañía: rosdep los pide con `sudo` |
+| App del ESP32 | 461 KB, 0 avisos | 490 KB, 0 avisos, **sin tocar código** | — |
+| Agente micro-ROS | compila | compila | — |
+| ESP32 pelado (sección 2) | todo verificado | todo verificado: sesión, QoS, GUI a 50 paq/s, sello a [−76, +20] ms, TF de las orugas, reconexión en 2–5 s | `791080a` (sello), vale para las dos |
+
+Tiempo en Jazzy: ~30 min de Mario (usuario y tres pasadas del instalador),
+32 min de `micro_ros_setup` (casi todo el submódulo `esp_wifi/lib` de
+ESP-IDF) y 8 min del primer build del firmware.
+
+Trampas por compartir un WSL, no de Jazzy: el demonio de `ros2` de una distro
+atiende al CLI de la otra (ROS en una sola distro a la vez, y `ros2 daemon
+stop` al cambiar); el reloj del WSL (sección 3).
+
+**Propuesta de resumen para la #15** (decide Mario): Jazzy funciona igual que
+Humble con StarCrawler, y el ESP32 no nota la diferencia (misma ESP-IDF 4.1,
+misma app). Solo hizo falta un cambio de código propio de Jazzy, `use_stamped:
+false` en `twist_mux`, compatible con las dos. El coste de cambiar es bajo. Lo
+que queda por decidir no es técnico: Jazzy da soporte hasta 2029 frente a 2027,
+pero separa del laboratorio (Donatello y `uma_environment` en Humble), y en
+Jazzy el ecosistema va hacia `TwistStamped`, una migración que tarde o temprano
+tocaría.
 
 ---
 
