@@ -13,6 +13,9 @@
 
 twist_mux:
   ros__parameters:
+    # El twist_mux de Jazzy usa TwistStamped por defecto; todo el grafo va
+    # con Twist. Humble no conoce el parametro y lo ignora.
+    use_stamped: false
     topics:
       # Teleoperacion con el mando. Prioridad baja a proposito: cualquier
       # cosa que se anada por encima manda sobre ella.
