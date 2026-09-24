@@ -102,7 +102,6 @@ def probar(mando):
 
 def leer(mando):
     """Devuelve (ejes, botones) ya en el formato del nodo joy de Linux."""
-    pygame.event.pump()
     a = lambda n: mando.get_axis(EJES_WIN[n])          # noqa: E731
     b = lambda n: 1 if mando.get_button(BOTONES_WIN[n]) else 0  # noqa: E731
 
@@ -147,9 +146,23 @@ def main():
     periodo = 1.0 / FRECUENCIA_HZ
     try:
         while True:
-            ejes, botones = leer(mando)
-            sock.sendto(json.dumps({"axes": ejes, "buttons": botones}).encode(),
-                        (ip, args.puerto))
+            # El DS4 se duerme por Bluetooth y al volver es otro dispositivo
+            # para SDL: sin esto se seguiria leyendo el viejo, todo a cero.
+            for ev in pygame.event.get():
+                if (ev.type == pygame.JOYDEVICEREMOVED and mando is not None
+                        and ev.instance_id == mando.get_instance_id()):
+                    mando = None
+                    print("Mando desconectado; espero a que vuelva.")
+                elif ev.type == pygame.JOYDEVICEADDED and mando is None:
+                    mando = pygame.joystick.Joystick(ev.device_index)
+                    mando.init()
+                    print("Mando reconectado: %s | disposicion %s"
+                          % (mando.get_name(), elegir_disposicion(mando)))
+            # Sin mando no se envia nada: joy_udp_node pasa a neutro solo
+            if mando is not None:
+                ejes, botones = leer(mando)
+                sock.sendto(json.dumps({"axes": ejes, "buttons": botones}).encode(),
+                            (ip, args.puerto))
             time.sleep(periodo)
     except KeyboardInterrupt:
         print("\nCerrado.")
