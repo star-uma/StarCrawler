@@ -96,9 +96,11 @@ Lo que **no** va a funcionar en WSL:
 
 ## 4. Lo que toca hacer, en orden
 
-### Tarea 1 — elegir distribución de ROS 2 (issue #15)
+### Tarea 1 — elegir distribución de ROS 2 (issue #15) — HUMBLE EN USO, JAZZY EN PRUEBA (tarea 7)
 
-Condiciona la versión de Ubuntu, así que va primero.
+Condiciona la versión de Ubuntu, así que va primero. Se montó Humble el
+22-09-2026 y funciona; el 24-09 Mario pidió probar Jazzy antes de instalar el
+mini PC. Ver la tarea 7.
 
 - **Humble** → Ubuntu 22.04. Es la del laboratorio: Donatello y el entorno
   `uma_environment` van sobre Humble. Soporte hasta mayo de 2027.
@@ -224,6 +226,83 @@ odometría se suscribían a `starcrawler/state` en modo fiable, y desde
 `fbf4e5a` el ESP32 publica en best-effort. No casaban y no les llegaba nada.
 `ros2 topic hz` no lo delata porque adapta el QoS solo. Y la odometría ahora
 deja de integrar si pasan 0,5 s sin estado.
+
+### Tarea 7 — probar Jazzy en paralelo, sin tocar Humble (pedida por Mario, 24-09-2026)
+
+**Por qué.** Humble tiene soporte hasta mayo de 2027; Jazzy, hasta mayo de
+2029. Si el proyecto sigue después de 2027 (otro TFG que lo continúe), en
+Humble se queda sin soporte. El mini PC del robot aún no está instalado, así
+que ahora es cuando cambiar sale barato.
+
+**No está decidido.** Mario quiere saber cuánto cuesta. Esta tarea es
+probarlo y dejar apuntado qué ha pasado; la decisión es suya (issue #15).
+Hasta entonces, Humble sigue siendo el entorno de referencia.
+
+**Antes de empezar, cerrar lo pendiente en Humble**, para tener una base
+limpia. Si no, un fallo en Jazzy no se sabrá si viene de Jazzy o del código
+nuevo:
+
+- La tarea 6: la vista 3D y `plano.rviz` con el robot simulado.
+- Con el ESP32 pelado: que la GUI y la odometría **reciban** su estado (el
+  arreglo de QoS de `db76c03`). Comprobarlo con `ros2 topic echo /odom` o
+  viendo que la GUI marca enlace, **no** con `ros2 topic hz`, que adapta el QoS
+  solo y fue justo lo que ocultó el fallo.
+
+**Reglas**
+
+- No tocar la distro `Ubuntu-22.04` de WSL ni su `~/microros_ws`. Jazzy va en
+  una distro nueva, `Ubuntu-24.04`, y las dos conviven.
+- El código tiene que seguir compilando en Humble. Lo que haga falta cambiar
+  para Jazzy, que sirva en los dos; en la app del ESP32, distinguiendo por
+  versión de ESP-IDF en `idf_compat.h`, que ya lo hace así.
+- No flashear el robot: solo el ESP32 pelado del banco.
+- No cambiar el `humble` por defecto de `instalar_pc_abordo.sh` ni los docs
+  hasta que Mario decida.
+
+**Pasos**
+
+1. La distro nueva. Antes, `wsl -l -v`, por si ya hay una 24.04 con otras cosas.
+
+```bash
+wsl --install -d Ubuntu-24.04
+```
+
+2. Dentro, lo mismo que el lunes en Humble: `git config --global
+   protocol.version 0` (la trampa de la red, ver sección 3), clonar
+   `feature/ros2` y lanzar la instalación **desde una terminal interactiva**,
+   porque `rosdep` pide el `sudo`:
+
+```bash
+./scripts/instalar_pc_abordo.sh jazzy
+```
+
+3. `colcon build --symlink-install` y `colcon test`. Lo esperado son **116
+   tests** (los 101 de antes más 15 de la GUI) y **ninguno saltado**: con ROS
+   cargado hay `xacro`, así que el test del URDF real corre. Avisos de
+   setuptools por el Python 3.12 de Ubuntu 24.04 son normales; errores, no.
+4. La tarea 6 otra vez, ahora en Jazzy: el launch con `sim:=true gui:=true
+   rviz:=true teleop:=false` y las dos vistas.
+5. micro-ROS: `micro_ros_setup` en su rama `jazzy`, en un `~/microros_ws` de la
+   distro nueva, y `create_firmware_ws.sh freertos esp32`. **Apuntar qué versión
+   de ESP-IDF trae**: con humble era la 4.1, y todo lo de abajo depende de eso.
+   Copiar la app y compilar. Donde espero que salte algo:
+   - `app.c` reutiliza `esp32_serial_open/close/write/read`, el transporte
+     serie de `freertos_apps`, para subir el UART a 921600. Si en la rama
+     jazzy se llaman distinto o cambian de firma, hay que adaptarlo. Es lo
+     primero que hay que mirar.
+   - Si trae ESP-IDF 5.x, el timer (`driver/timer.h`) y el I2C
+     (`driver/i2c.h`) de `hw.c` son los drivers antiguos: deberían compilar
+     con avisos de obsoleto. No pasarlos a `gptimer`/`i2c_master` en esta
+     tarea, salvo que no compile.
+6. Flashear el ESP32 pelado y repetir lo del lunes: sesión con el agente,
+   `error_bits` 111, las tasas (~49 Hz), la reconexión al reiniciar el agente,
+   y que la GUI y la odometría reciban el estado.
+7. El mando por el puente UDP, igual que en Humble.
+
+**Qué dejar apuntado aquí**, para que Mario decida: una tabla Humble frente a
+Jazzy, paso por paso (funciona / con avisos / roto y qué se tocó), la versión de
+ESP-IDF, y más o menos cuánto tiempo llevó. Y proponerle a Mario un resumen para
+la issue #15.
 
 ## 5. Decisiones ya cerradas — no las vuelvas a abrir
 
