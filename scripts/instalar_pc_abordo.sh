@@ -168,8 +168,12 @@ else
   bien "ROS ya se cargaba en el .bashrc"
 fi
 
+# Los setup.bash de ROS leen variables sin definir: con set -u el script
+# moria aqui sin avisar
+set +u
 # shellcheck disable=SC1090
 source "/opt/ros/$DISTRO/setup.bash"
+set -u
 
 # ---------------------------------------------------------------------
 # 4. Compilar el workspace
