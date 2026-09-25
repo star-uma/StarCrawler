@@ -59,10 +59,14 @@ if [ -z "${DISTRO:-}" ] || [ ! -f "/opt/ros/$DISTRO/setup.bash" ]; then
   exit 1
 fi
 
+# Los setup.bash de ROS leen variables sin definir: con set -u el script
+# moria aqui sin avisar, como le pasaba al instalador (c6c160e)
+set +u
 # shellcheck disable=SC1090,SC1091
 source "/opt/ros/$DISTRO/setup.bash"
 # shellcheck disable=SC1090,SC1091
 source "$WS/install/setup.bash"
+set -u
 
 # --- Esperar al puerto del ESP32 --------------------------------------
 
