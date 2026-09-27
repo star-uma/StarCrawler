@@ -1,10 +1,17 @@
 /*
- * can_bus.cpp
- * ===========
- * Implementación de los dos backends CAN. Ver can_bus.h.
+ * can_bus_impl.h
+ * ==============
+ * Implementacion de los dos backends CAN. Ver can_bus.h.
+ * No se compila en la biblioteca: la incluye el hw.cpp de cada variante
+ * despues de su config.h (una biblioteca Arduino no ve el config.h).
  */
-#include "config.h"
-#include "can_bus.h"
+#pragma once
+
+#ifndef CAN_BACKEND
+#error "Incluir config.h antes de can_bus_impl.h (ver hw.cpp)"
+#endif
+
+#include <can_bus.h>
 
 #if CAN_BACKEND == CAN_BACKEND_MCP2515
 /* ═══ Backend MCP2515 (ACAN2515, modo polling) ════════════════════════════
