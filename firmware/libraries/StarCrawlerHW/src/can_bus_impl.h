@@ -70,7 +70,13 @@ bool canbus_init() {
   return twai_start() == ESP_OK;
 }
 
+/* Con el bus caido no se encola nada: el driver de IDF casca (assert en
+ * twai.c) si quedan tramas pendientes al recuperarse. */
 bool canbus_enviar(uint32_t id, const uint8_t datos[8]) {
+  twai_status_info_t st;
+  if (twai_get_status_info(&st) != ESP_OK || st.state != TWAI_STATE_RUNNING) {
+    return false;
+  }
   twai_message_t msg = {};
   msg.identifier = id;
   msg.data_length_code = 8;
@@ -86,7 +92,19 @@ bool canbus_recibir(uint32_t *id, uint8_t datos[8]) {
   return true;
 }
 
-void canbus_atender() { /* nada que hacer: el TWAI tiene colas hardware */ }
+/* Bus-off (un motor apagado, un cable suelto): vaciar colas, recuperar y
+ * volver a arrancar cuando el controlador quede parado. */
+void canbus_atender() {
+  twai_status_info_t st;
+  if (twai_get_status_info(&st) != ESP_OK) return;
+  if (st.state == TWAI_STATE_BUS_OFF) {
+    twai_clear_transmit_queue();
+    twai_clear_receive_queue();
+    twai_initiate_recovery();
+  } else if (st.state == TWAI_STATE_STOPPED) {
+    twai_start();
+  }
+}
 
 #else
 #error "CAN_BACKEND no válido: usa CAN_BACKEND_MCP2515 o CAN_BACKEND_TWAI"

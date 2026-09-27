@@ -20,5 +20,6 @@ bool canbus_enviar(uint32_t id, const uint8_t datos[8]);
 /* Lee una trama pendiente si la hay. Devuelve false si no hay nada. */
 bool canbus_recibir(uint32_t *id, uint8_t datos[8]);
 
-/* Mantenimiento del backend (polling del MCP2515). Llamar cada ciclo. */
+/* Mantenimiento del backend: polling del MCP2515, o recuperacion del TWAI
+ * tras un bus-off. Llamar cada ciclo. */
 void canbus_atender();
