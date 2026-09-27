@@ -1,9 +1,8 @@
 /*
  * sensors.h
  * =========
- * Sensores I2C del robot:
- *   - 4x AS5600 (ángulo de cada oruga) tras el multiplexor TCA9548A
- *   - MPU9250 (IMU para el nivelado automático, modo 5)
+ * IMU MPU9250 para el nivelado automatico (modo 5). Los encoders AS5600
+ * estan en la biblioteca StarCrawlerHW (encoders.h), que se incluye aqui.
  *
  * La IMU estaba conectada al MKR en el diseño original; en la arquitectura
  * unificada cuelga del mismo bus I2C del ESP32 (dirección 0x68, sin
@@ -14,15 +13,7 @@
 #include <stdint.h>
 #include "control_core.h"
 
-/* ── Encoders AS5600 ────────────────────────────────────────────────────── */
-
-void encoders_init();
-
-/* Lee el ángulo de la oruga 'idx' {FR,FL,RR,RL} en grados (con offset).
- * Lectura de los dos bytes en una única transacción I2C (el original leía
- * byte alto y bajo por separado y podía mezclar dos muestras distintas).
- * Devuelve false si el sensor no responde. */
-bool encoders_leer(int idx, float *angDeg);
+#include <encoders.h>   /* los 4 AS5600, en StarCrawlerHW */
 
 /* ── IMU MPU9250 ────────────────────────────────────────────────────────── */
 

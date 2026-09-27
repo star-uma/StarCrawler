@@ -1,11 +1,19 @@
 /*
- * encoders.cpp — StarCrawler BÁSICO (sin IMU)
- * ===========================================
+ * encoders_impl.h
+ * ===============
+ * Implementacion de los encoders. Ver encoders.h.
+ * No se compila en la biblioteca: la incluye el hw.cpp de cada variante
+ * despues de su config.h.
  */
+#pragma once
+
+#ifndef OFFSETS_ENCODER
+#error "Incluir config.h antes de encoders_impl.h (ver hw.cpp)"
+#endif
+
 #include <Arduino.h>
 #include <Wire.h>
-#include "config.h"
-#include "encoders.h"
+#include <encoders.h>
 
 static const float offsetsEncoder[CC_NUM_ORUGAS] = OFFSETS_ENCODER;
 

@@ -8,3 +8,4 @@
 
 #include <can_bus_impl.h>
 #include <steppers_impl.h>
+#include <encoders_impl.h>
