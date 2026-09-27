@@ -1,6 +1,6 @@
 /*
- * steppers.cpp
- * ============
+ * steppers_impl.h
+ * ===============
  * Generación de pasos por timer hardware + ISR. Ver steppers.h.
  *
  * El timer corre a un tick fijo (TICK_ISR_US) y cada motor cuenta ticks
@@ -8,12 +8,20 @@
  * distintas con un solo temporizador. Sobre eso se monta la rampa de
  * aceleración: cada motor arranca a SEMIPERIODO_ARRANQUE_US y acelera
  * hasta SEMIPERIODO_STEP_US.
+ *
+ * No se compila en la biblioteca: la incluye el hw.cpp de cada variante
+ * despues de su config.h.
  */
+#pragma once
+
+#ifndef SEMIPERIODO_STEP_US
+#error "Incluir config.h antes de steppers_impl.h (ver hw.cpp)"
+#endif
+
 #include <Arduino.h>
 #include "soc/gpio_struct.h"
-#include "config.h"
-#include "steppers.h"
-#include "control_core.h"
+#include <steppers.h>
+#include <control_core.h>
 
 static const int pinStep[CC_NUM_ORUGAS] = PINES_STEP;
 static const int pinDir[CC_NUM_ORUGAS]  = PINES_DIR;

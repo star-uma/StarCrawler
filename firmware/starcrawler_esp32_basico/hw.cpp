@@ -7,3 +7,4 @@
 #include "config.h"
 
 #include <can_bus_impl.h>
+#include <steppers_impl.h>
