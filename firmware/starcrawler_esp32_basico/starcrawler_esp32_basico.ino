@@ -273,7 +273,7 @@ static void enviarTelemetria() {
   if (!pcConocido || WiFi.status() != WL_CONNECTED) return;
 
   uint8_t buf[18];
-  cc_construirTelemetria(buf, angulos, modoActivo, bitsDeError());
+  cc_construirTelemetria(buf, angulos, 0.0f, 0.0f, modoActivo, bitsDeError());  /* sin IMU: roll y pitch a cero */
   udp.beginPacket(ipPC, PUERTO_TELEMETRIA);
   udp.write(buf, sizeof(buf));
   udp.endPacket();

@@ -2,7 +2,7 @@
  * control_core.h — StarCrawler BÁSICO (sin IMU)
  * =============================================
  * Lógica pura de control, subconjunto sin nivelado/IMU de la versión
- * canónica y testeada en firmware/starcrawler_esp32/control_core.h
+ * canónica y testeada en firmware/libraries/StarCrawlerHW/src/control_core.h
  * (los tests de test/host/ cubren estas mismas funciones).
  */
 #pragma once

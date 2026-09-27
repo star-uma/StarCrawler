@@ -18,7 +18,7 @@ Write-Host "`n[1/2] Compilando tests de control_core..." -ForegroundColor Cyan
 g++ -std=c++11 -Wall -Wextra -O2 `
     -o $exe1 `
     (Join-Path $aqui "test_control_core.cpp") `
-    (Join-Path $aqui "..\..\firmware\starcrawler_esp32\control_core.cpp")
+    (Join-Path $aqui "..\..\firmware\libraries\StarCrawlerHW\src\control_core.cpp")
 
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR de compilacion" -ForegroundColor Red; exit 1 }
 & $exe1

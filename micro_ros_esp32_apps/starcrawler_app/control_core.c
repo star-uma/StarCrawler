@@ -1,7 +1,7 @@
 /*
  * control_core.cpp — StarCrawler BÁSICO (sin IMU)
  * ===============================================
- * Subconjunto de firmware/starcrawler_esp32/control_core.cpp (versión
+ * Subconjunto de firmware/libraries/StarCrawlerHW/src/control_core.cpp (versión
  * canónica testeada). Idéntico salvo: sin nivelado, sin filtro de actitud,
  * y la telemetría rellena roll/pitch a cero.
  */

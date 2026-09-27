@@ -16,7 +16,7 @@
 #include <cstring>
 #include <cmath>
 
-#include "../../firmware/starcrawler_esp32/control_core.h"
+#include "../../firmware/libraries/StarCrawlerHW/src/control_core.h"
 
 static int pruebas = 0;
 static int fallos = 0;
