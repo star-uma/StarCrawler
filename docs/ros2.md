@@ -308,7 +308,7 @@ de Bluepad32) y ocupa solo el 22 % de la flash.
 
 ```bash
 arduino-cli lib install ACAN2515
-arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32_ros2
+arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --libraries firmware/libraries firmware/starcrawler_esp32_ros2
 arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32_ros2
 ```
 
@@ -403,7 +403,7 @@ Tres cosas que el código no puede resolver solo:
    publica `linear.x = 0.01 m/s` durante 10 s y mide lo recorrido; ajusta el
    radio en proporción. La separación, con cinta métrica.
 2. **Mapeo del mando** (`config/ds4.yaml`) — ver 5.3.
-3. **Offsets de encoder** `{-2, -5, 16, -15}` en el `config.h` del firmware:
+3. **Offsets de encoder** `{-2, -5, 16, -15}` en `hw_comun.h` del firmware:
    son del robot en 2025, conviene recalibrarlos con las orugas en horizontal.
 
 Y una verificación de hardware que sigue pendiente de las etapas anteriores:

@@ -243,17 +243,15 @@ Todo el detalle está en la issue #6.
 
 ## Dónde vive cada constante
 
-Todas en `config.h`, en las cuatro variantes de firmware:
+Todas en un solo sitio, común a las variantes de firmware:
 
 ```
-firmware/starcrawler_esp32/config.h
-firmware/starcrawler_esp32_basico/config.h
-firmware/starcrawler_esp32_standalone/config.h   (rama standalone-sin-pc)
-firmware/starcrawler_esp32_ros2/config.h         (rama ros2)
+firmware/libraries/StarCrawlerHW/src/hw_comun.h
 ```
 
-Están duplicadas byte a byte, así que **un cambio hay que replicarlo en las
-cuatro**. Es lo que describe la issue #10.
+Antes estaban copiadas en el `config.h` de cada variante (issue #10). La
+variante standalone, que vive en su rama, conserva su copia hasta que se
+fusione.
 
 Los sketches de `test/target/` tienen su propia copia de los valores al
 principio de cada `.ino`, a propósito: así cada prueba compila sola sin

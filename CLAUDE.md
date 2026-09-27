@@ -43,6 +43,8 @@ fuente de verdad**: estuvo duplicada en el simulador y en la GUI, y un error de
 signo ahí no da un fallo evidente — el robot funciona, pero mueve los brazos al
 revés. No la reimplementes en otro sitio.
 
-Las constantes de la cadena de elevación están duplicadas en los `config.h` de
-las cuatro variantes de firmware. Un cambio hay que replicarlo en las cuatro
-(issue #10). De dónde sale cada número: [`docs/cadena_de_elevacion.md`](docs/cadena_de_elevacion.md).
+El hardware del robot (CAN, pines, cadena de elevación, offsets de encoder) está
+una sola vez, en `firmware/libraries/StarCrawlerHW/src/hw_comun.h`, junto con el
+código que comparten las variantes (issue #10). Se compila con `--libraries
+firmware/libraries`. No vuelvas a copiar módulos dentro de una variante. De dónde
+sale cada número: [`docs/cadena_de_elevacion.md`](docs/cadena_de_elevacion.md).

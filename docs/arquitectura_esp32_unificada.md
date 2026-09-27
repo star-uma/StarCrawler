@@ -37,7 +37,7 @@ el MCP2515 por SPI, o el TWAI interno) y la IMU (se recablea al I2C del ESP32).
    (SN65HVD230, ~2 €). Libera el SPI y elimina los dos problemas anteriores.
    Se activa compilando con `-DCAN_BACKEND=2`:
    ```powershell
-   arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --build-property "compiler.cpp.extra_flags=-DCAN_BACKEND=2" firmware/starcrawler_esp32
+   arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --libraries firmware/libraries --build-property "compiler.cpp.extra_flags=-DCAN_BACKEND=2" firmware/starcrawler_esp32
    ```
 
 ## 3. Nueva arquitectura
@@ -69,7 +69,8 @@ El ESP32 toma la IP estática que tenía el MKR (`192.168.10.101`), por lo que
 ### Mapa de pines del ESP32 (¡cambia respecto al TFG!)
 
 Los pines originales del ESP32 (18, 19, 5…) chocaban con el SPI que ahora
-necesita el MCP2515, así que el mapa es nuevo. Todo está en `config.h`.
+necesita el MCP2515, así que el mapa es nuevo. Todo está en `hw_comun.h`
+(`firmware/libraries/StarCrawlerHW/src/`), común a todas las variantes.
 
 | Función | Pines {FR, FL, RR, RL} |
 |---|---|
@@ -111,7 +112,7 @@ bascula. Regla extraída de los Stateflow charts del modelo (4 casos por oruga):
 El modelo usaba 5 °/s constante con ángulo <180° y una velocidad *variable*
 con ángulo >180° cuya fórmula está en subsistemas gráficos del `.slx` (no
 extraíble como texto); ambos firmwares usan constante en todo el rango como
-aproximación (`COMPENSACION_DPS` en `config.h`, desactivable con
+aproximación (`COMPENSACION_DPS` en `hw_comun.h`, desactivable con
 `COMPENSACION_TRACCION 0`). El signo eléctrico por motor
 (`TABLA_SIGNO_COMPENSACION`, lado izquierdo invertido como en tracción) hay
 que **verificarlo en hardware** con el robot sobre tacos.
@@ -147,7 +148,7 @@ Correcciones sobre el firmware ESP32 original (detalladas en la revisión):
 
 Decisión heredada a revisar: al parar un stepper se deshabilita el driver
 (`PARADA_LIBERA_DRIVER 1`, como el original — la reductora 1:80 retiene). Si se
-prefiere par de retención, ponerlo a 0 en `config.h`.
+prefiere par de retención, ponerlo a 0 en `hw_comun.h`.
 
 ### Telemetría nueva (robot → PC, puerto 8886, 10 Hz)
 
@@ -193,7 +194,7 @@ Los niveles 3 y 4 requieren el robot.
 
 ```powershell
 arduino-cli lib install ACAN2515
-arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32
+arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --libraries firmware/libraries firmware/starcrawler_esp32
 arduino-cli upload -p COMx --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32
 ```
 

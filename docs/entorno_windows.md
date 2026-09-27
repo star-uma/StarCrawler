@@ -110,7 +110,7 @@ git clone -b feature/ros2 git@github.com:star-uma/StarCrawler.git
 ## Compilar y flashear
 
 ```powershell
-arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32
+arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --libraries firmware/libraries firmware/starcrawler_esp32
 arduino-cli upload -p COMx --fqbn esp32:esp32:esp32doit-devkit-v1 firmware/starcrawler_esp32
 ```
 
