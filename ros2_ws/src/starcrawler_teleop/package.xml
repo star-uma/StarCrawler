@@ -5,14 +5,17 @@
   <version>0.1.0</version>
   <description>
     Teleoperacion de StarCrawler con mando (esquema simultaneo): traccion
-    siempre activa mas control superpuesto de las cuatro orugas.
+    siempre activa mas control superpuesto de las cuatro orugas. Incluye
+    crawler_mux, el multiplexor de /crawler/command.
   </description>
   <maintainer email="mariogj.03@uma.es">Mario Garcia Jimenez</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
+  <depend>starcrawler_common</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>starcrawler_msgs</depend>
   <exec_depend>joy</exec_depend>
   <exec_depend>twist_mux</exec_depend>
@@ -21,6 +24,7 @@
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

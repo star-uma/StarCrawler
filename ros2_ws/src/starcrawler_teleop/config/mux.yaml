@@ -1,0 +1,74 @@
+# Multiplexores de las dos consignas del robot, como el de Donatello.
+#
+# Cada fuente publica en sus propios topicos y los muxes eligen. Gana SIEMPRE
+# la de mayor prioridad que tenga mensajes frescos. Si una fuente deja de
+# publicar durante mas de su timeout, se la ignora y pasa el turno a la
+# siguiente: el robot no se queda con la ultima orden de un nodo que se ha
+# muerto.
+#
+#   twist_mux   (de ROS)  -> /cmd_vel
+#   crawler_mux (propio)  -> /crawler/command. Ademas hace el OR de las
+#                            emergencias de las fuentes frescas y engancha la
+#                            de las fuentes con engancha: true hasta que se
+#                            publica en /crawler_mux/rearmar.
+#
+# Las dos secciones llevan la misma tabla de fuentes; test/test_mux_yaml.py
+# comprueba que coinciden. web y joy_activo caducan por debajo de los 300 ms
+# del watchdog del ESP32: al soltarlas, el relevo al DS4 en reposo llega
+# antes de que salte.
+
+twist_mux:
+  ros__parameters:
+    # El twist_mux de Jazzy usa TwistStamped por defecto; todo el grafo va
+    # con Twist. Humble no conoce el parametro y lo ignora.
+    use_stamped: false
+    topics:
+      # Teleop del DS4: publica siempre, con ceros en reposo.
+      joy:
+        topic   : cmd_vel_joy
+        timeout : 0.5
+        priority: 10
+
+      # Mando web (gui_node con gui_mando:=true).
+      web:
+        topic   : cmd_vel_web
+        timeout : 0.25
+        priority: 20
+
+      # Teleop del DS4, solo mientras se toca: gana a la web.
+      joy_activo:
+        topic   : cmd_vel_joy_activo
+        timeout : 0.25
+        priority: 30
+
+      # Reservado para navegacion autonoma (Nav2). Todavia no existe: hace
+      # falta un LiDAR, que no hay. Se deja declarado para que el dia que
+      # aparezca no haya que tocar el grafo, solo publicar en el topico.
+      # No tiene orugas: no esta en crawler_mux.
+      navigation:
+        topic   : cmd_vel_nav
+        timeout : 0.5
+        priority: 100
+
+crawler_mux:
+  ros__parameters:
+    topics:
+      joy:
+        topic   : crawler/command_joy
+        timeout : 0.5
+        priority: 10
+        engancha: false
+
+      # La emergencia web queda enganchada; SHARE del DS4 no (vale mientras
+      # se pulsa).
+      web:
+        topic   : crawler/command_web
+        timeout : 0.25
+        priority: 20
+        engancha: true
+
+      joy_activo:
+        topic   : crawler/command_joy_activo
+        timeout : 0.25
+        priority: 30
+        engancha: false

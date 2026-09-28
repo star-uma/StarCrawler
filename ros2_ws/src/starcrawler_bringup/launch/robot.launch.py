@@ -19,7 +19,12 @@ Uso:
     ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true teleop:=false
     ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true
     ros2 launch starcrawler_bringup robot.launch.py micro_ros:=false   # firmware serie
+    ros2 launch starcrawler_bringup robot.launch.py sim:=true gui_mando:=true  # conducir desde la web
 """
+import os
+
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
@@ -28,6 +33,16 @@ from launch.substitutions import (Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+
+
+def topes_del_mando():
+    """Los topes del DS4 (ds4.yaml), para que la web use los mismos."""
+    ruta = os.path.join(get_package_share_directory('starcrawler_teleop'),
+                        'config', 'ds4.yaml')
+    with open(ruta, encoding='utf-8') as f:
+        p = yaml.safe_load(f)['starcrawler_teleop']['ros__parameters']
+    return {k: float(p[k])
+            for k in ('max_lineal', 'max_angular', 'factor_lento', 's_preset')}
 
 
 def generate_launch_description():
@@ -61,6 +76,14 @@ def generate_launch_description():
             'gui', default_value='false',
             description='Interfaz web en http://localhost:8000'),
         DeclareLaunchArgument(
+            'gui_mando', default_value='false',
+            description='Conducir desde la interfaz web (arranca la GUI). El '
+                        'enlace con la clave sale en el log'),
+        DeclareLaunchArgument(
+            'gui_clave', default_value='',
+            description='Clave del mando web; vacia = una al azar en cada '
+                        'arranque'),
+        DeclareLaunchArgument(
             'odom', default_value='true',
             description='Publicar odometria de orugas y la TF odom->base'),
         DeclareLaunchArgument(
@@ -82,6 +105,16 @@ def generate_launch_description():
     port = LaunchConfiguration('port')
     sim = LaunchConfiguration('sim')
     micro_ros = LaunchConfiguration('micro_ros')
+    teleop = LaunchConfiguration('teleop')
+    gui_mando = LaunchConfiguration('gui_mando')
+    mux_yaml = PathJoinSubstitution([teleop_share, 'config', 'mux.yaml'])
+
+    # Los muxes hacen falta con cualquier fuente de consignas
+    con_mux = PythonExpression([
+        "'", teleop, "' == 'true' or '", gui_mando, "' == 'true'"])
+    con_gui = PythonExpression([
+        "'", LaunchConfiguration('gui'), "' == 'true' or '", gui_mando,
+        "' == 'true'"])
 
     # Solo una fuente de estado a la vez, por prioridad: sim, simulate,
     # driver serie y, si nada de eso, micro-ROS
@@ -188,23 +221,38 @@ def generate_launch_description():
             package='starcrawler_teleop',
             executable='teleop_node',
             name='starcrawler_teleop',
-            condition=IfCondition(LaunchConfiguration('teleop')),
+            condition=IfCondition(teleop),
             parameters=[
                 PathJoinSubstitution([teleop_share, 'config', 'ds4.yaml'])],
-            # El mando ya no manda directo: entra al mux como una fuente mas
-            remappings=[('cmd_vel', 'cmd_vel_joy')],
+            # El mando entra a los muxes como dos fuentes: joy siempre (ceros
+            # en reposo) y joy_activo solo mientras se toca (ver mux.yaml)
+            remappings=[('cmd_vel', 'cmd_vel_joy'),
+                        ('cmd_vel_activo', 'cmd_vel_joy_activo'),
+                        ('crawler/command', 'crawler/command_joy'),
+                        ('crawler/command_activo', 'crawler/command_joy_activo')],
             output='screen',
         ),
-        # Multiplexor de velocidad. Elige entre las fuentes por prioridad y
-        # descarta la que se quede sin publicar (ver twist_mux.yaml).
+        # Multiplexores de velocidad y de orugas: eligen por prioridad y
+        # descartan la fuente que se calla. Si caen, el ESP32 para solo.
         Node(
             package='twist_mux',
             executable='twist_mux',
             name='twist_mux',
-            condition=IfCondition(LaunchConfiguration('teleop')),
-            parameters=[
-                PathJoinSubstitution([teleop_share, 'config', 'twist_mux.yaml'])],
+            condition=IfCondition(con_mux),
+            parameters=[mux_yaml],
             remappings=[('cmd_vel_out', 'cmd_vel')],
+            respawn=True,
+            respawn_delay=1.0,
+            output='screen',
+        ),
+        Node(
+            package='starcrawler_teleop',
+            executable='crawler_mux',
+            name='crawler_mux',
+            condition=IfCondition(con_mux),
+            parameters=[mux_yaml],
+            respawn=True,
+            respawn_delay=1.0,
             output='screen',
         ),
         # Interfaz web. Apagada por defecto: levanta un servidor HTTP y
@@ -213,7 +261,12 @@ def generate_launch_description():
             package='starcrawler_gui',
             executable='gui_node',
             name='starcrawler_gui',
-            condition=IfCondition(LaunchConfiguration('gui')),
+            condition=IfCondition(con_gui),
+            parameters=[topes_del_mando(), {
+                'mando': ParameterValue(gui_mando, value_type=bool),
+                'mando_token': ParameterValue(
+                    LaunchConfiguration('gui_clave'), value_type=str),
+            }],
             output='screen',
         ),
         # Marco fijo odom: el robot se desplaza por la rejilla. El

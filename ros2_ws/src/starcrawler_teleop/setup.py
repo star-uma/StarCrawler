@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config',
-            ['config/ds4.yaml', 'config/twist_mux.yaml']),
+            ['config/ds4.yaml', 'config/mux.yaml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             'teleop_node = starcrawler_teleop.teleop_node:main',
             'joy_udp_node = starcrawler_teleop.joy_udp_node:main',
+            'crawler_mux = starcrawler_teleop.crawler_mux_node:main',
         ],
     },
 )
