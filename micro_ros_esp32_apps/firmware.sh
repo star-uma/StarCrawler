@@ -23,8 +23,13 @@ cd "$WS"
 
 case "${1:-}" in
 compilar)
+    antes="$(ls "$APP" 2>/dev/null || true)"
     rm -rf "$APP"
     cp -r "$REPO/micro_ros_esp32_apps/starcrawler_app" "$APP"
+    # La logica de control es la de StarCrawlerHW, la de los tests de host.
+    # Como .c: es C valido y el build de freertos_apps ya la conocia asi.
+    cp "$REPO/firmware/libraries/StarCrawlerHW/src/control_core.h" "$APP/"
+    cp "$REPO/firmware/libraries/StarCrawlerHW/src/control_core.cpp" "$APP/control_core.c"
     if [ "${2:-}" = "--simulado" ]; then
         sed -i 's/^#define HW_SIMULADO 0/#define HW_SIMULADO 1/' "$APP/config.h"
         grep -q '^#define HW_SIMULADO 1' "$APP/config.h"
@@ -35,6 +40,13 @@ compilar)
         rm -rf "$FW/mcu_ws/starcrawler_msgs"
         cp -r "$REPO/ros2_ws/src/starcrawler_msgs" "$FW/mcu_ws/"
         echo ">>> starcrawler_msgs actualizado en el firmware"
+    fi
+    # Los fuentes de la app se cogen con un GLOB al configurar, y reconfigurar
+    # desde make rompe el build (su make hijo mete "Leaving directory" en los
+    # includes): si cambia la lista de ficheros, se configura de cero
+    if [ "$(ls "$APP")" != "$antes" ]; then
+        echo ">>> cambian los ficheros de la app: configure_firmware.sh"
+        ros2 run micro_ros_setup configure_firmware.sh starcrawler_app -t serial
     fi
     ros2 run micro_ros_setup build_firmware.sh
     echo ">>> $(stat -c %s "$BIN") bytes: $BIN"
