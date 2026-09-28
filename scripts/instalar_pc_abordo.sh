@@ -21,8 +21,8 @@
 #                ecosistema del laboratorio.
 #
 #  QUE **NO** HACE
-#      - No instala el entorno de micro-ROS. Eso es aparte y solo hace
-#        falta si se migra el firmware del ESP32 a micro-ROS.
+#      - No compila ni flashea el firmware del ESP32: eso lo hace
+#        micro_ros_esp32_apps/firmware.sh (el agente y su workspace, si).
 #      - No habilita el arranque automatico del robot. Se pregunta al
 #        final y por defecto NO se activa: con el servicio habilitado el
 #        robot queda operativo nada mas dar tension.
@@ -100,7 +100,7 @@ bien "Workspace encontrado en $WS"
 # ---------------------------------------------------------------------
 # 1. Locale
 # ---------------------------------------------------------------------
-titulo "1 de 6 - Idioma del sistema (UTF-8)"
+titulo "1 de 7 - Idioma del sistema (UTF-8)"
 
 paso "ROS 2 necesita un locale UTF-8..."
 sudo apt-get update -qq
@@ -113,7 +113,7 @@ bien "Locale configurado"
 # ---------------------------------------------------------------------
 # 2. Repositorio de ROS 2
 # ---------------------------------------------------------------------
-titulo "2 de 6 - Repositorio de ROS 2"
+titulo "2 de 7 - Repositorio de ROS 2"
 
 if [ -f /etc/apt/sources.list.d/ros2.list ] || [ -f /etc/apt/sources.list.d/ros2-latest.list ]; then
   bien "El repositorio de ROS 2 ya esta dado de alta"
@@ -135,7 +135,7 @@ sudo apt-get update -qq
 # ---------------------------------------------------------------------
 # 3. ROS 2 y paquetes de StarCrawler
 # ---------------------------------------------------------------------
-titulo "3 de 6 - ROS 2 $DISTRO"
+titulo "3 de 7 - ROS 2 $DISTRO"
 
 if [ -d "/opt/ros/$DISTRO" ]; then
   bien "ROS 2 $DISTRO ya esta instalado"
@@ -178,7 +178,7 @@ set -u
 # ---------------------------------------------------------------------
 # 4. Compilar el workspace
 # ---------------------------------------------------------------------
-titulo "4 de 6 - Compilando el workspace de StarCrawler"
+titulo "4 de 7 - Compilando el workspace de StarCrawler"
 
 if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then
   paso "Inicializando rosdep (solo la primera vez en esta maquina)..."
@@ -207,9 +207,61 @@ if ! grep -q "$WS/install/setup.bash" "$HOME/.bashrc" 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------
-# 5. Acceso al ESP32 por USB
+# 5. Agente de micro-ROS
 # ---------------------------------------------------------------------
-titulo "5 de 6 - Acceso al ESP32 por USB"
+titulo "5 de 7 - Agente de micro-ROS"
+
+# El ESP32 habla micro-ROS, como el de Donatello, y el PC necesita el
+# agente. No es un paquete de ROS: lo construye micro_ros_setup en su propio
+# workspace, que sirve tambien para compilar el firmware.
+MICROROS_WS="${MICROROS_WS:-$HOME/microros_ws}"
+if [ -x "$MICROROS_WS/install/micro_ros_agent/lib/micro_ros_agent/micro_ros_agent" ]; then
+  bien "El agente ya esta compilado en $MICROROS_WS"
+else
+  if [ ! -d "$MICROROS_WS/src/micro_ros_setup" ]; then
+    paso "Descargando micro_ros_setup ($DISTRO)..."
+    mkdir -p "$MICROROS_WS/src"
+    # protocol.version=0: con el v2, GitHub por HTTPS falla en algunas redes
+    if ! git -c protocol.version=0 clone -q -b "$DISTRO" \
+         https://github.com/micro-ROS/micro_ros_setup.git \
+         "$MICROROS_WS/src/micro_ros_setup"; then
+      malo "No pude descargar micro_ros_setup."
+      echo "  Si git pide usuario o dice 'expected flush after ref listing':"
+      echo "      git config --global protocol.version 0"
+      exit 1
+    fi
+  fi
+  paso "Compilando micro_ros_setup..."
+  ( cd "$MICROROS_WS" && rosdep install --from-paths src --ignore-src -y ) \
+    || aviso "rosdep no pudo resolver todo en $MICROROS_WS"
+  if ! ( cd "$MICROROS_WS" && colcon build ); then
+    malo "No compila micro_ros_setup. A mano:  cd $MICROROS_WS && colcon build"
+    exit 1
+  fi
+  set +u
+  # shellcheck disable=SC1090,SC1091
+  source "$MICROROS_WS/install/local_setup.bash"
+  set -u
+  paso "Creando y compilando el agente. Tarda unos minutos..."
+  if ( cd "$MICROROS_WS" && ros2 run micro_ros_setup create_agent_ws.sh \
+       && ros2 run micro_ros_setup build_agent.sh ); then
+    bien "Agente compilado en $MICROROS_WS"
+  else
+    malo "No se pudo compilar el agente de micro-ROS."
+    echo "  Referencia: https://github.com/micro-ROS/micro_ros_setup"
+    exit 1
+  fi
+fi
+
+if ! grep -q "$MICROROS_WS/install/local_setup.bash" "$HOME/.bashrc" 2>/dev/null; then
+  echo "source $MICROROS_WS/install/local_setup.bash" >> "$HOME/.bashrc"
+  bien "El agente se cargara solo en cada terminal nueva"
+fi
+
+# ---------------------------------------------------------------------
+# 6. Acceso al ESP32 por USB
+# ---------------------------------------------------------------------
+titulo "6 de 7 - Acceso al ESP32 por USB"
 
 # Sin el grupo dialout no se puede abrir /dev/ttyUSB0: el nodo driver
 # fallaria con un error de permisos poco explicativo.
@@ -235,9 +287,9 @@ else
 fi
 
 # ---------------------------------------------------------------------
-# 6. Arranque automatico (opcional)
+# 7. Arranque automatico (opcional)
 # ---------------------------------------------------------------------
-titulo "6 de 6 - Arranque automatico (opcional)"
+titulo "7 de 7 - Arranque automatico (opcional)"
 
 echo
 echo "  Se puede configurar el robot para que arranque solo al encender"
@@ -265,9 +317,9 @@ echo
 bien "ROS 2 $DISTRO instalado y el workspace compilado."
 echo
 echo "  ABRE UNA TERMINAL NUEVA (para que se cargue todo) y prueba"
-echo "  primero SIN el robot, con el simulador que trae el driver:"
+echo "  primero SIN el robot, con el robot simulado:"
 echo
-echo "      ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true"
+echo "      ros2 launch starcrawler_bringup robot.launch.py sim:=true gui:=true rviz:=true"
 echo
 echo "  Deberias ver el robot en RViz. Para moverlo sin mando:"
 echo
