@@ -165,7 +165,9 @@ class RobotSimulado:
 
         self.vel_izq_dps = 0.0
         self.vel_der_dps = 0.0
+        # Como enSeguridad en app.c: watchdog vencido o emergencia
         self.seguridad = True
+        self._vencido = True
 
         self._obj_izq_dps = 0.0
         self._obj_der_dps = 0.0
@@ -218,8 +220,9 @@ class RobotSimulado:
             self._medido = [leer_as5600(self.angulo[i], OFFSETS_ENCODER[i])
                             for i in range(N_ORUGAS)]
 
-        self.seguridad = (self._t - self._t_ultimo_cmd) > self.watchdog_s
-        if self.seguridad or self._emergencia:
+        self._vencido = (self._t - self._t_ultimo_cmd) > self.watchdog_s
+        self.seguridad = self._vencido or self._emergencia
+        if self.seguridad:
             self.vel_izq_dps = 0.0
             self.vel_der_dps = 0.0
             for i in range(N_ORUGAS):
@@ -264,7 +267,7 @@ class RobotSimulado:
             errores |= ERR_ENCODER
         if not self.can_ok:
             errores |= ERR_CAN
-        if self.seguridad:
+        if self._vencido:
             errores |= ERR_WATCHDOG
         return errores
 

@@ -126,6 +126,14 @@ def test_la_emergencia_para_la_traccion():
     assert r.vel_izq_dps == 0.0 and r.vel_der_dps == 0.0
 
 
+def test_la_emergencia_es_estado_seguro_sin_bit_de_watchdog():
+    r = robot_activo()
+    r.consigna_orugas([0] * N_ORUGAS, [180.0] * N_ORUGAS, False, True)
+    r.avanzar(DT)
+    assert r.seguridad is True
+    assert not r.bits_error & ERR_WATCHDOG
+
+
 # --- Elevacion -------------------------------------------------------------
 
 def test_velocidad_de_regimen_del_stepper():
