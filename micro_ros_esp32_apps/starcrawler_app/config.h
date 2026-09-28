@@ -30,6 +30,16 @@
  * Dejar a 0 salvo para depurar a mano con un monitor serie. */
 #define DEBUG_TEXTO 0
 
+/* ═══ HARDWARE SIMULADO ═══════════════════════════════════════════════════
+ * 1 = sin robot: no se toca ningun pin, y los brazos, los encoders y el CAN
+ * se simulan en el propio ESP32 (hw.c) con la misma ISR y la misma rampa.
+ * Para probar el grafo de ROS 2 entero con el ESP32 del banco. El estado lo
+ * avisa con el bit 7 de error_bits. Nunca a 1 en el robot: no moveria nada.
+ */
+#ifndef HW_SIMULADO
+#define HW_SIMULADO 0
+#endif
+
 /* ═══ TRACCION (RMD-X8 por CAN) ═══════════════════════════════════════════ */
 
 #define CAN_ID_FL 0x141

@@ -38,3 +38,6 @@ bool encoders_leer(int idx, float *angDeg);
 /* --- Utilidades ------------------------------------------------------ */
 
 uint32_t hw_millis(void);
+
+/* Bit 7 de error_bits: planta simulada (HW_SIMULADO en config.h) */
+#define HW_ERR_SIMULADO (1u << 7)

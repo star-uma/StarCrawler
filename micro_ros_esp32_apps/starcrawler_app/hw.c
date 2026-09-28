@@ -13,6 +13,7 @@
 #include "config.h"
 #include "control_core.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -21,6 +22,14 @@
 #include "driver/timer.h"
 #include "esp_timer.h"
 #include "idf_compat.h"
+
+/* Con HW_SIMULADO (config.h) no se toca ni un pin: el CAN no se instala, los
+ * pulsos de la ISR mueven brazos simulados y los encoders leen esos brazos. */
+#if HW_SIMULADO
+#define PIN(p, v) ((void)(p), (void)(v))
+#else
+#define PIN(p, v) gpio_set_level((gpio_num_t)(p), (v))
+#endif
 
 /* ==================================================================== */
 /*  Utilidades                                                          */
@@ -33,6 +42,27 @@ uint32_t hw_millis(void) {
 /* ==================================================================== */
 /*  CAN (TWAI)                                                          */
 /* ==================================================================== */
+
+#if HW_SIMULADO
+
+/* La app no lee las respuestas de los RMD: basta con aceptar las tramas */
+bool canbus_init(void) { return true; }
+
+bool canbus_enviar(uint32_t id, const uint8_t datos[8]) {
+    (void)id;
+    (void)datos;
+    return true;
+}
+
+bool canbus_recibir(uint32_t *id, uint8_t datos[8]) {
+    (void)id;
+    (void)datos;
+    return false;
+}
+
+void canbus_atender(void) {}
+
+#else
 
 bool canbus_init(void) {
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
@@ -83,6 +113,8 @@ void canbus_atender(void) {
     }
 }
 
+#endif /* HW_SIMULADO */
+
 /* ==================================================================== */
 /*  Steppers                                                            */
 /* ==================================================================== */
@@ -112,7 +144,12 @@ static volatile bool     motorActivo[CC_NUM_ORUGAS];
 static volatile bool     nivelStep[CC_NUM_ORUGAS];
 static volatile uint16_t periodoTicks[CC_NUM_ORUGAS];
 static volatile uint16_t contadorTicks[CC_NUM_ORUGAS];
-static int8_t            sentidoActual[CC_NUM_ORUGAS];
+static volatile int8_t   sentidoActual[CC_NUM_ORUGAS];
+
+#if HW_SIMULADO
+/* Pulsos dados por cada brazo: la posicion del brazo simulado */
+static volatile int32_t  pulsosSim[CC_NUM_ORUGAS];
+#endif
 
 #define TIMER_GRUPO  TIMER_GROUP_0
 #define TIMER_IDX    TIMER_0
@@ -125,7 +162,10 @@ static bool IRAM_ATTR steppers_isr(void *arg) {
         contadorTicks[i] = 0;
 
         nivelStep[i] = !nivelStep[i];
-        gpio_set_level((gpio_num_t)pinStep[i], nivelStep[i] ? 1 : 0);
+        PIN(pinStep[i], nivelStep[i] ? 1 : 0);
+#if HW_SIMULADO
+        if (nivelStep[i]) pulsosSim[i] += sentidoActual[i];
+#endif
 
         if (!nivelStep[i] && periodoTicks[i] > TICKS_REGIMEN) {
             /* Pulso completo terminado: acelerar acortando el semiperiodo */
@@ -139,17 +179,19 @@ static bool IRAM_ATTR steppers_isr(void *arg) {
 
 void steppers_init(void) {
     for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+#if !HW_SIMULADO
         gpio_reset_pin((gpio_num_t)pinStep[i]);
         gpio_reset_pin((gpio_num_t)pinDir[i]);
         gpio_reset_pin((gpio_num_t)pinEna[i]);
         gpio_set_direction((gpio_num_t)pinStep[i], GPIO_MODE_OUTPUT);
         gpio_set_direction((gpio_num_t)pinDir[i],  GPIO_MODE_OUTPUT);
         gpio_set_direction((gpio_num_t)pinEna[i],  GPIO_MODE_OUTPUT);
+#endif
 
-        gpio_set_level((gpio_num_t)pinStep[i], 0);
-        gpio_set_level((gpio_num_t)pinDir[i], 0);
+        PIN(pinStep[i], 0);
+        PIN(pinDir[i], 0);
         /* Arranque en estado seguro: drivers deshabilitados */
-        gpio_set_level((gpio_num_t)pinEna[i], 1);
+        PIN(pinEna[i], 1);
 
         motorActivo[i]   = false;
         nivelStep[i]     = false;
@@ -183,11 +225,11 @@ void steppers_comando(int motor, int8_t cmd) {
         /* STEP en bajo: si queda en alto, la primera conmutacion del
          * siguiente arranque es un flanco de bajada y no da paso. */
         nivelStep[motor] = false;
-        gpio_set_level((gpio_num_t)pinStep[motor], 0);
+        PIN(pinStep[motor], 0);
 #if PARADA_LIBERA_DRIVER
-        gpio_set_level((gpio_num_t)pinEna[motor], 1);
+        PIN(pinEna[motor], 1);
 #else
-        gpio_set_level((gpio_num_t)pinEna[motor], 0);
+        PIN(pinEna[motor], 0);
 #endif
         return;
     }
@@ -199,16 +241,15 @@ void steppers_comando(int motor, int8_t cmd) {
      * el DM542 de un paso hacia el lado contrario. */
     if (sentidoActual[motor] != sentido) {
         motorActivo[motor] = false;
-        gpio_set_level((gpio_num_t)pinDir[motor],
-                       (sentido > 0) ? dirHorario[motor]
-                                     : dirAntihorario[motor]);
+        PIN(pinDir[motor], (sentido > 0) ? dirHorario[motor]
+                                         : dirAntihorario[motor]);
         esp_rom_delay_us(10);              /* margen DIR->STEP del DM542 */
         periodoTicks[motor]  = TICKS_ARRANQUE;
         contadorTicks[motor] = 0;
         sentidoActual[motor] = sentido;
     }
 
-    gpio_set_level((gpio_num_t)pinEna[motor], 0);   /* driver habilitado */
+    PIN(pinEna[motor], 0);   /* driver habilitado */
     motorActivo[motor] = true;
 }
 
@@ -233,6 +274,28 @@ bool steppers_algunoActivo(void) {
                             ? pdMS_TO_TICKS(I2C_TIMEOUT_MS) : 2)
 
 static const float offsetsEncoder[CC_NUM_ORUGAS] = OFFSETS_ENCODER;
+
+#if HW_SIMULADO
+
+/* 400 pulsos por vuelta en el DM542 y reductora 1:80
+ * (docs/cadena_de_elevacion.md). Los brazos arrancan horizontales. */
+#define SIM_GRADOS_POR_PULSO   (360.0f / (400.0f * 80.0f))
+#define SIM_ANGULO_INICIAL_DEG 180.0f
+
+void encoders_init(void) {}
+
+/* Como el AS5600: 12 bits por vuelta y el mismo offset que el robot */
+bool encoders_leer(int idx, float *angDeg) {
+    if (idx < 0 || idx >= CC_NUM_ORUGAS) return false;
+    const float brazo = SIM_ANGULO_INICIAL_DEG
+                      + (float)pulsosSim[idx] * SIM_GRADOS_POR_PULSO;
+    long crudo = lrintf((brazo - offsetsEncoder[idx]) / 0.087890625f) % 4096;
+    if (crudo < 0) crudo += 4096;
+    *angDeg = cc_as5600ADeg((uint16_t)crudo, offsetsEncoder[idx]);
+    return true;
+}
+
+#else
 
 void encoders_init(void) {
     i2c_config_t cfg = {
@@ -276,3 +339,5 @@ bool encoders_leer(int idx, float *angDeg) {
     *angDeg = cc_as5600ADeg(crudo, offsetsEncoder[idx]);
     return true;
 }
+
+#endif /* HW_SIMULADO */

@@ -338,7 +338,8 @@ static void TaskControl(void *arg) {
         velIzqReal  = velIzqActual;
         velDerReal  = velDerActual;
         enSeguridad = (emer || vencido);
-        bitsError   = errores | (canOk ? 0 : CC_ERR_CAN);
+        bitsError   = errores | (canOk ? 0 : CC_ERR_CAN)
+                    | (HW_SIMULADO ? HW_ERR_SIMULADO : 0);
         portEXIT_CRITICAL(&mux);
 
         vTaskDelayUntil(&ultimoDespertar, periodo);
