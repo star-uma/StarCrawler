@@ -17,8 +17,8 @@
  *   nucleo 0 - micro-ROS (executor + publicacion) y watchdog
  *   nucleo 1 - lazo de control a 100 Hz, que es lo que no puede jitter
  *
- * SIN VERIFICAR: este fichero no se ha compilado nunca. Necesita el
- * entorno de micro_ros_setup, que no esta montado. Ver README.md.
+ * Compila con micro_ros_setup (ESP-IDF 4.1) y funciona en el banco con el
+ * ESP32 solo; con el robot, sin probar. Ver README.md.
  */
 
 #include <rcl/rcl.h>
