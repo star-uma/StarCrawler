@@ -68,6 +68,25 @@ source "/opt/ros/$DISTRO/setup.bash"
 source "$WS/install/setup.bash"
 set -u
 
+# --- Agente de micro-ROS ----------------------------------------------
+
+# El ESP32 habla micro-ROS (MICRO_ROS=false: el firmware serie anterior).
+# El agente no es un paquete de ROS: vive en el workspace de micro_ros_setup.
+MICRO_ROS="${MICRO_ROS:-true}"
+MICROROS_WS="${MICROROS_WS:-$HOME/microros_ws}"
+if [ -f "$MICROROS_WS/install/local_setup.bash" ]; then
+  set +u
+  # shellcheck disable=SC1090,SC1091
+  source "$MICROROS_WS/install/local_setup.bash"
+  set -u
+fi
+if [ "$MICRO_ROS" = "true" ] && ! ros2 pkg prefix micro_ros_agent >/dev/null 2>&1; then
+  echo "ERROR: no encuentro el agente de micro-ROS en $MICROROS_WS" >&2
+  echo "       Lo compila ./scripts/instalar_pc_abordo.sh (paso 5)." >&2
+  echo "       Con el firmware serie:  MICRO_ROS=false $0" >&2
+  exit 1
+fi
+
 # --- Esperar al puerto del ESP32 --------------------------------------
 
 # En el arranque del sistema, udev puede tardar en crear el enlace. Si el
@@ -87,7 +106,7 @@ fi
 # --- Arrancar ---------------------------------------------------------
 
 echo "=== StarCrawler $(date '+%Y-%m-%d %H:%M:%S') ==="
-echo "ROS $DISTRO | dominio $ROS_DOMAIN_ID | puerto $PUERTO"
+echo "ROS $DISTRO | dominio $ROS_DOMAIN_ID | puerto $PUERTO | micro-ROS $MICRO_ROS"
 
 exec ros2 launch starcrawler_bringup robot.launch.py \
-     port:="$PUERTO" rviz:=false >> "$REGISTRO" 2>&1
+     port:="$PUERTO" micro_ros:="$MICRO_ROS" rviz:=false >> "$REGISTRO" 2>&1

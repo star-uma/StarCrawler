@@ -5,19 +5,24 @@ Levanta todo lo que corre en el PC de a bordo:
 
     robot_state_publisher  (URDF -> TF, dibuja el robot)
     starcrawler_chasis     (el chasis apoyado en sus orugas)
-    starcrawler_driver     (puente serie con el ESP32)
+    micro_ros_agent        (el ESP32 es un nodo ROS 2, como en Donatello)
     joy + starcrawler_teleop  (mando conectado al PC)
 
+El estado del robot sale de uno solo de estos, por prioridad:
+    sim:=true          starcrawler_sim, sin hardware
+    simulate:=true     el driver serie con su ESP32 simulado
+    micro_ros:=false   el driver serie con el ESP32 real (el camino anterior)
+    (por defecto)      el agente de micro-ROS
+
 Uso:
-    ros2 launch starcrawler_bringup robot.launch.py
-    ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true
-    ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true teleop:=false
     ros2 launch starcrawler_bringup robot.launch.py port:=/dev/ttyUSB0
-    ros2 launch starcrawler_bringup robot.launch.py teleop:=false   # solo driver
+    ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true teleop:=false
+    ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true
+    ros2 launch starcrawler_bringup robot.launch.py micro_ros:=false   # firmware serie
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch.substitutions import (Command, LaunchConfiguration, PythonExpression,
                                   PathJoinSubstitution)
 from launch_ros.actions import Node
@@ -40,9 +45,10 @@ def generate_launch_description():
             'port', default_value='/dev/starcrawler',
             description='Puerto serie del ESP32 (ver udev/99-starcrawler.rules)'),
         DeclareLaunchArgument(
-            'micro_ros', default_value='false',
-            description='El ESP32 es nodo ROS 2 nativo: se lanza el agente '
-                        'de micro-ROS en vez del nodo driver'),
+            'micro_ros', default_value='true',
+            description='El ESP32 es nodo ROS 2 nativo y se lanza el agente '
+                        'de micro-ROS; false = driver serie (firmware '
+                        'starcrawler_esp32_ros2)'),
         DeclareLaunchArgument(
             'micro_ros_baud', default_value='921600',
             description='Debe coincidir con SERIE_BAUDIOS del config.h de la '
@@ -74,6 +80,17 @@ def generate_launch_description():
 
     simulate = LaunchConfiguration('simulate')
     port = LaunchConfiguration('port')
+    sim = LaunchConfiguration('sim')
+    micro_ros = LaunchConfiguration('micro_ros')
+
+    # Solo una fuente de estado a la vez, por prioridad: sim, simulate,
+    # driver serie y, si nada de eso, micro-ROS
+    usar_driver = PythonExpression([
+        "'", sim, "' != 'true' and ('", simulate, "' == 'true' or '",
+        micro_ros, "' != 'true')"])
+    usar_agente = PythonExpression([
+        "'", sim, "' != 'true' and '", simulate, "' != 'true' and '",
+        micro_ros, "' == 'true'"])
 
     robot_description = ParameterValue(
         Command(['xacro ', PathJoinSubstitution(
@@ -87,16 +104,13 @@ def generate_launch_description():
             parameters=[{'robot_description': robot_description}],
             output='screen',
         ),
-        # El driver habla con el ESP32 real (o con su simulador de puerto
-        # serie). Con sim:=true no pinta nada: el nodo de abajo publica el
-        # estado directamente.
+        # El driver habla con el ESP32 del firmware serie (o con su
+        # simulador de puerto serie): el camino anterior a micro-ROS.
         Node(
             package='starcrawler_driver',
             executable='driver_node',
             name='starcrawler_driver',
-            condition=UnlessCondition(PythonExpression([
-                "'", LaunchConfiguration('sim'), "' == 'true' or '",
-                LaunchConfiguration('micro_ros'), "' == 'true'"])),
+            condition=IfCondition(usar_driver),
             parameters=[
                 PathJoinSubstitution([driver_share, 'config', 'driver.yaml']),
                 {'simulate': ParameterValue(simulate, value_type=bool),
@@ -111,7 +125,7 @@ def generate_launch_description():
             package='micro_ros_agent',
             executable='micro_ros_agent',
             name='micro_ros_agent',
-            condition=IfCondition(LaunchConfiguration('micro_ros')),
+            condition=IfCondition(usar_agente),
             arguments=['serial', '--dev', LaunchConfiguration('port'),
                        '-b', LaunchConfiguration('micro_ros_baud')],
             output='screen',
@@ -122,7 +136,7 @@ def generate_launch_description():
             package='starcrawler_sim',
             executable='sim_node',
             name='starcrawler_sim',
-            condition=IfCondition(LaunchConfiguration('sim')),
+            condition=IfCondition(sim),
             parameters=[PathJoinSubstitution(
                 [sim_share, 'config', 'sim.yaml'])],
             output='screen',
