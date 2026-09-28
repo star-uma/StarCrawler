@@ -9,13 +9,8 @@
  */
 #pragma once
 
-/* ═══ BACKEND CAN ═════════════════════════════════════════════════════════ */
-#define CAN_BACKEND_MCP2515 1
-#define CAN_BACKEND_TWAI    2
-
-#ifndef CAN_BACKEND
-#define CAN_BACKEND CAN_BACKEND_MCP2515
-#endif
+/* El CAN va siempre por el TWAI interno + transceptor (hw.c): la app no
+ * tiene backend MCP2515, a diferencia de StarCrawlerHW. */
 
 /* ═══ ENLACE SERIE CON EL PC ══════════════════════════════════════════════ */
 
@@ -57,12 +52,6 @@
 #define TABLA_SIGNO_COMPENSACION { +1.0f, -1.0f, +1.0f, -1.0f }
 
 /* ═══ PINES (ESP32 DevKit V1) ═════════════════════════════════════════════ */
-
-#define PIN_SPI_SCK  18
-#define PIN_SPI_MISO 19
-#define PIN_SPI_MOSI 23
-#define PIN_CAN_CS   5
-#define PIN_CAN_INT  35
 
 #define PIN_TWAI_TX  5
 #define PIN_TWAI_RX  35

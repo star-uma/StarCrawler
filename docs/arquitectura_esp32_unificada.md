@@ -32,12 +32,12 @@ el MCP2515 por SPI, o el TWAI interno) y la IMU (se recablea al I2C del ESP32).
    - Módulo MCP2515 modificado: cortar la pista de VCC del TJA1050 y alimentar
      MCP2515 a 3.3 V y TJA1050 a 5 V (mod muy documentado en internet).
    - Level shifter en MISO como mínimo (MOSI/SCK/CS suelen tolerar 3.3 V de entrada).
-3. **Alternativa recomendada a futuro (backend ya implementado):** el ESP32 lleva
-   controlador CAN interno (**TWAI**). Solo necesita un transceptor de 3.3 V
-   (SN65HVD230, ~2 €). Libera el SPI y elimina los dos problemas anteriores.
-   Se activa compilando con `-DCAN_BACKEND=2`:
+3. **Lo que se usa, y el backend por defecto:** el ESP32 lleva controlador CAN
+   interno (**TWAI**). Solo necesita un transceptor (SN65HVD230, ~2 €). Libera
+   el SPI y elimina los dos problemas anteriores (issue #7). Para volver al
+   MCP2515, compilar con `-DCAN_BACKEND=1`:
    ```powershell
-   arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --libraries firmware/libraries --build-property "compiler.cpp.extra_flags=-DCAN_BACKEND=2" firmware/starcrawler_esp32
+   arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 --libraries firmware/libraries --build-property "compiler.cpp.extra_flags=-DCAN_BACKEND=1" firmware/starcrawler_esp32
    ```
 
 ## 3. Nueva arquitectura

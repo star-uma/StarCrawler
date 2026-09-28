@@ -11,16 +11,16 @@
 #pragma once
 
 /* ═══ BACKEND CAN ═════════════════════════════════════════════════════════
+ * CAN_BACKEND_TWAI (por defecto): controlador CAN interno del ESP32 (TWAI)
+ *   + transceptor externo. Es el hardware del robot (issue #7).
  * CAN_BACKEND_MCP2515: módulo externo MCP2515 por SPI (cristal de 16 MHz
- *   OBLIGATORIO para 1 Mbps; con cristal de 8 MHz no se alcanza).
- * CAN_BACKEND_TWAI: controlador CAN interno del ESP32 (TWAI) + transceptor
- *   externo de 3.3 V (p. ej. SN65HVD230).
+ *   OBLIGATORIO para 1 Mbps). Se elige con -DCAN_BACKEND=1.
  */
 #define CAN_BACKEND_MCP2515 1
 #define CAN_BACKEND_TWAI    2
 
 #ifndef CAN_BACKEND
-#define CAN_BACKEND CAN_BACKEND_MCP2515
+#define CAN_BACKEND CAN_BACKEND_TWAI
 #endif
 
 /* ═══ TEMPORIZACIÓN DEL LAZO ══════════════════════════════════════════════ */
