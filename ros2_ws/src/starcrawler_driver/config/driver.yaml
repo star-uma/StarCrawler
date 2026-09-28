@@ -15,8 +15,9 @@ starcrawler_driver:
     tx_divider: 2                 # -> 50 tramas/s al ESP32
     cmd_timeout_s: 0.5            # sin consigna fresca -> ceros
 
-    wheel_radius: 0.025           # m  (VERIFICAR: ver cabecera)
-    track_separation: 0.40        # m  (VERIFICAR)
+    # Del CAD, como la odometria y la app de micro-ROS (VERIFICAR: cabecera)
+    wheel_radius: 0.0764          # m
+    track_separation: 0.524       # m
     max_track_speed_dps: 40.0     # tope, igual que el firmware
 
     joint_names:

@@ -56,8 +56,8 @@ class StarCrawlerDriver(Node):
         self.declare_parameter('cmd_timeout_s', 0.5)
         # Geometria: SOLO afecta a la conversion cmd_vel <-> dps y a la odometria.
         # Calibrar midiendo: manda 0.05 m/s durante 10 s y mide lo recorrido.
-        self.declare_parameter('wheel_radius', 0.025)     # radio efectivo motriz
-        self.declare_parameter('track_separation', 0.40)  # entre ejes de oruga
+        self.declare_parameter('wheel_radius', 0.0764)    # radio efectivo motriz
+        self.declare_parameter('track_separation', 0.524) # entre ejes de oruga
         self.declare_parameter('max_track_speed_dps', 40.0)
         self.declare_parameter('joint_names', [
             'crawler_fr_joint', 'crawler_fl_joint',
