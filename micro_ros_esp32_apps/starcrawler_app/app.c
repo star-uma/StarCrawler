@@ -228,6 +228,8 @@ static void TaskControl(void *arg) {
     float velIzqActual = 0.0f, velDerActual = 0.0f;
     bool  enMarcha[CC_NUM_ORUGAS] = {false, false, false, false};
     int8_t ultimoCmd[CC_NUM_ORUGAS] = {0, 0, 0, 0};
+    /* Ultimo angulo bueno de cada encoder, como en la version Arduino */
+    float ang[CC_NUM_ORUGAS] = {180.0f, 180.0f, 180.0f, 180.0f};
     uint32_t ciclo = 0;
 
     TickType_t ultimoDespertar = xTaskGetTickCount();
@@ -238,12 +240,13 @@ static void TaskControl(void *arg) {
         canbus_atender();
 
         /* 1. Leer los cuatro encoders */
-        float ang[CC_NUM_ORUGAS];
         bool  ok[CC_NUM_ORUGAS];
         uint16_t errores = 0;
         for (int i = 0; i < CC_NUM_ORUGAS; i++) {
-            ok[i] = encoders_leer(i, &ang[i]);
-            if (!ok[i]) errores |= (1u << i);
+            float leido;
+            ok[i] = encoders_leer(i, &leido);
+            if (ok[i]) ang[i] = leido;
+            else errores |= (1u << i);
         }
 
         /* 2. Tomar una foto de las consignas */
@@ -280,9 +283,12 @@ static void TaskControl(void *arg) {
             for (int i = 0; i < CC_NUM_ORUGAS; i++) {
                 int8_t cmd;
                 if (porPos) {
-                    cmd = cc_controlPosicion(ang[i], objDeg[i], enMarcha[i],
-                                             UMBRAL_ARRANQUE_DEG,
-                                             UMBRAL_PARADA_DEG);
+                    /* Sin encoder valido no hay lazo cerrado: brazo parado */
+                    cmd = ok[i] ? cc_controlPosicion(ang[i], objDeg[i],
+                                                     enMarcha[i],
+                                                     UMBRAL_ARRANQUE_DEG,
+                                                     UMBRAL_PARADA_DEG)
+                                : 0;
                 } else {
                     cmd = cmdPedido[i];
                 }
