@@ -54,11 +54,13 @@ del grafo es idéntico, porque los tópicos son los mismos.
 
 | Modo | Arranque | Quién habla con el grafo |
 |---|---|---|
-| **Robot real** | (por defecto) | `starcrawler_driver`, que traduce tramas serie con CRC16 |
-| **micro-ROS** | `micro_ros:=true` | El agente. El ESP32 publica y se suscribe por sí mismo |
+| **micro-ROS** | (por defecto) | El agente. El ESP32 publica y se suscribe por sí mismo, como en Donatello |
+| **Firmware serie** | `micro_ros:=false` | `starcrawler_driver`, que traduce tramas serie con CRC16 (el camino anterior) |
 | **Simulado** | `sim:=true` | `starcrawler_sim`, sin hardware ninguno |
 
-Los tres son excluyentes: el launch se encarga de que no se pisen.
+Son excluyentes y el launch se encarga de que no se pisen: `sim:=true` y
+`simulate:=true` mandan sobre micro-ROS. El agente vive en `~/microros_ws`
+(lo compila el paso 5 de `instalar_pc_abordo.sh`).
 
 ### Los paquetes del workspace
 
@@ -225,7 +227,10 @@ Hay **dos simuladores**, y sirven para cosas distintas.
 
 `starcrawler_sim` sustituye al robot entero: publica los mismos tópicos que
 publicará el ESP32 con micro-ROS, así que el resto del grafo no distingue si
-hay hardware o no.
+hay hardware o no. Por dentro imita a la app del ESP32: lazo de 100 Hz,
+saturación a 40 dps, watchdog de 300 ms, histéresis de posición, la rampa de
+los steppers y encoders de 12 bits. Marca el bit 7 de `error_bits` (hardware
+simulado).
 
 ```bash
 ros2 launch starcrawler_bringup robot.launch.py sim:=true rviz:=true gui:=true
@@ -247,8 +252,13 @@ siguiendo al robot. La web 3D es la misma idea en `starcrawler_gui`, con
 three.js. **Sin internet en el equipo que la abre necesita la copia local** de
 three.js: ver `starcrawler_gui/starcrawler_gui/static/README.md`.
 
-El modelo es cinemático: al bajar una oruga la punta atraviesa el suelo, en
-vez de levantar el chasis como pasaría de verdad. Pasa igual en las dos.
+El chasis se apoya en sus orugas: `chasis_node` (en `starcrawler_odometry`)
+calcula con las cuatro elevaciones cómo queda sobre suelo llano y lo publica
+en tres juntas virtuales del URDF (`chassis_lift/pitch/roll_joint`). Con el
+preset de −45° se pone de pie sobre las orugas; con la cruceta se inclina.
+Cada oruga es su banda entre la polea activa y la pasiva, y el nodo lee esas
+cotas del propio URDF. Es una estimación en llano, igual con el simulador que
+con el robot: con una IMU, cabeceo y balanceo saldrían de ella.
 
 Se pueden simular averías para ver cómo responde el grafo con el robot
 degradado, sin desconectar nada de verdad:
@@ -256,6 +266,22 @@ degradado, sin desconectar nada de verdad:
 ```bash
 ros2 launch starcrawler_bringup robot.launch.py sim:=true   --ros-args -p starcrawler_sim.encoders_ok:=false
 ```
+
+### El ESP32 real con la planta simulada (`HW_SIMULADO`)
+
+A medio camino: el firmware de micro-ROS de verdad, en el ESP32 de verdad,
+con los motores, los encoders y el CAN simulados dentro del propio micro.
+Prueba lo que el simulador de ROS no puede: el transporte, el agente, los
+tiempos del lazo y la ISR de los steppers.
+
+```bash
+./micro_ros_esp32_apps/firmware.sh compilar --simulado
+./micro_ros_esp32_apps/firmware.sh flashear /dev/ttyUSB0
+ros2 launch starcrawler_bringup robot.launch.py micro_ros:=true port:=/dev/ttyUSB0 gui:=true rviz:=true
+```
+
+Las dos vistas marcan `HARDWARE SIMULADO`. Detalles en
+[`starcrawler_app/README.md`](../micro_ros_esp32_apps/starcrawler_app/README.md).
 
 ### El ESP32 simulado (`simulate:=true`)
 
@@ -286,14 +312,18 @@ ros2 run rqt_graph rqt_graph                # ver el grafo de nodos
 ros2 bag record -a -o sesion_01             # grabar TODO para revisarlo luego
 ```
 
-Mover el robot sin mando, para probar la cadena:
+Mover el robot sin mando, para probar la cadena. Hacen falta los dos a la
+vez, cada uno en su terminal: `/crawler/command` es el latido de la parada y,
+sin él, el robot se queda en estado seguro aunque le llegue `/cmd_vel`. Sin
+`/cmd_vel`, la tracción baja a 0 y se queda con par.
 
 ```bash
+# Terminal 1: las orugas, quietas ('{increment: [1, 1, 0, 0]}' sube el par delantero)
+ros2 topic pub -r 20 /crawler/command starcrawler_msgs/msg/CrawlerCommand '{}'
+
+# Terminal 2: la tracción
 ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
   '{linear: {x: 0.01}, angular: {z: 0.0}}'
-
-ros2 topic pub -r 20 /crawler/command starcrawler_msgs/msg/CrawlerCommand \
-  '{increment: [1, 1, 0, 0]}'               # sube el par delantero
 ```
 
 ---
@@ -302,7 +332,15 @@ ros2 topic pub -r 20 /crawler/command starcrawler_msgs/msg/CrawlerCommand \
 
 ### 5.1 Flashear el ESP32
 
-Firmware nuevo: [`firmware/starcrawler_esp32_ros2/`](../firmware/starcrawler_esp32_ros2).
+Con micro-ROS, el camino por defecto:
+
+```bash
+./micro_ros_esp32_apps/firmware.sh compilar
+./micro_ros_esp32_apps/firmware.sh flashear /dev/ttyUSB0
+```
+
+Con el firmware serie anterior (arrancar después con `micro_ros:=false`):
+[`firmware/starcrawler_esp32_ros2/`](../firmware/starcrawler_esp32_ros2).
 Sin WiFi ni Bluetooth, así que se compila con el **core esp32 normal** (no el
 de Bluepad32) y ocupa solo el 22 % de la flash.
 
@@ -398,7 +436,9 @@ superpuestas.
 
 Tres cosas que el código no puede resolver solo:
 
-1. **`wheel_radius` y `track_separation`** (en `config/driver.yaml`). Solo
+1. **`wheel_radius` y `track_separation`**: en `odometry.yaml`, `sim.yaml`,
+   `driver.yaml` y en `app.c` (`RADIO_POLEA_M`, `SEPARACION_VIAS_M`), que
+   tienen que coincidir; los topes del mando en `ds4.yaml` salen de ellos. Solo
    afectan a la conversión `/cmd_vel` ↔ dps y a la odometría. Método honesto:
    publica `linear.x = 0.01 m/s` durante 10 s y mide lo recorrido; ajusta el
    radio en proporción. La separación, con cinta métrica.
@@ -451,9 +491,9 @@ si el cable USB da problemas, se ve en `frames_crc_error`.
 | Modelo del robot simulado (`starcrawler_sim`) | ✅ 22/22 |
 | Odometría (`starcrawler_odometry`) | ✅ 15/15 |
 
-**Sin verificar (necesita Ubuntu o el robot):** `colcon build` completo,
-arranque real de los nodos, y todo lo del apartado 7. Nada del workspace se ha
-ejecutado nunca: esa es la issue #12 y es lo primero que hay que hacer.
+**Desde el 22-09** el workspace compila y corre en Ubuntu 22.04 con Humble
+(y en 24.04 con Jazzy): el estado al día está en la sección 2 de
+`README-CLAUDE.md`. **Sin robot sigue sin verificar** todo lo del apartado 7.
 
 **Siguientes pasos naturales:**
 
@@ -467,7 +507,8 @@ ejecutado nunca: esa es la issue #12 y es lo primero que hay que hacer.
    robot navega solo. Es donde ROS 2 empieza a pagar de verdad.
 4. **micro-ROS en el ESP32**: ya hay una primera versión escrita en
    [`micro_ros_esp32_apps/starcrawler_app/`](../micro_ros_esp32_apps/starcrawler_app),
-   con la misma estructura que la de Donatello, pero **sin compilar nunca**.
+   con la misma estructura que la de Donatello. Compila y funciona en el
+   banco con el ESP32 solo (22-09) y con la planta simulada (28-09).
    Ojo: sustituye la pila de comunicaciones del firmware y con ella
    desaparece `starcrawler_driver`. Es la issue #16.
 

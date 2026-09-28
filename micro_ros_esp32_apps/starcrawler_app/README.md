@@ -48,15 +48,30 @@ en la versión Arduino, con su rampa de aceleración.
 
 ## Qué se reutiliza sin tocar
 
-`control_core.c` es **C puro sin dependencias** y está cubierto por los tests
-de `test/host/` (66/66). Se copia tal cual: toda la lógica de control —
-saturación, rampa, límites software, histéresis de posición, tramas RMD —
-viene ya probada.
+La lógica de control es la de `firmware/libraries/StarCrawlerHW`, la misma de
+las variantes Arduino: **C puro sin dependencias** y cubierta por los tests de
+`test/host/` (77/77). Desde el 28-09 la app no tiene copia: `firmware.sh` copia
+`control_core.cpp` como `control_core.c` al compilar (es C válido). Toda la
+lógica — saturación, rampa, límites software, histéresis de posición, tramas y
+respuestas de los RMD — viene ya probada.
 
 Eso fue una decisión deliberada desde el principio, y es lo que hace que esta
 migración sea razonable: lo que se reescribe es el andamiaje, no el control.
 
 ## Compilar
+
+Con el workspace de `micro_ros_setup` ya montado (`~/microros_ws`, o
+`MICROROS_WS`), desde la raíz del repo:
+
+```bash
+./micro_ros_esp32_apps/firmware.sh compilar              # para el robot
+./micro_ros_esp32_apps/firmware.sh compilar --simulado   # HW_SIMULADO, ver abajo
+./micro_ros_esp32_apps/firmware.sh flashear /dev/ttyUSB0
+```
+
+El script copia la app y `starcrawler_msgs` al workspace y llama a
+`build_firmware.sh` / `flash_firmware.sh`. Los pasos a mano, para montar el
+workspace la primera vez o si algo falla:
 
 Necesitas el sistema de compilación de micro-ROS. Sigue la receta del
 laboratorio: <https://github.com/jmgandarias/micro_ros_esp32_apps>
@@ -68,6 +83,11 @@ ros2 run micro_ros_setup create_firmware_ws.sh freertos esp32
 # 2. Copiar esta carpeta a las apps del firmware
 cp -r micro_ros_esp32_apps/starcrawler_app \
       firmware/freertos_apps/apps/
+#    ... con la logica de control de StarCrawlerHW
+cp firmware/libraries/StarCrawlerHW/src/control_core.h \
+   firmware/freertos_apps/apps/starcrawler_app/
+cp firmware/libraries/StarCrawlerHW/src/control_core.cpp \
+   firmware/freertos_apps/apps/starcrawler_app/control_core.c
 
 # 3. Los mensajes propios tienen que estar en el firmware
 cp -r ros2_ws/src/starcrawler_msgs \
@@ -95,6 +115,31 @@ ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/starcrawler -b 921600
 > Por eso `app.c` registra su propio transporte, que envuelve al de
 > `freertos_apps` y sube el baudio a `SERIE_BAUDIOS` (921600) al abrir. El
 > agente y `micro_ros_baud` del launch deben ir al mismo valor.
+
+## Hardware simulado (`HW_SIMULADO`)
+
+Para probar el grafo de ROS 2 entero con el ESP32 del banco, sin robot. Con
+`HW_SIMULADO 1` en `config.h` (o `firmware.sh compilar --simulado`, que no
+toca el `config.h` del repo) la app es la misma y corre igual; solo cambia
+`hw.c`:
+
+| | Robot | `HW_SIMULADO` |
+|---|---|---|
+| Pines | STEP/DIR/ENA de los DM542 | **ninguno**: ni se configuran |
+| Steppers | la ISR da pulsos | la misma ISR, con su rampa: cada flanco de subida mueve el brazo simulado 360/(400·80) grados |
+| Encoders | AS5600 por el TCA9548A | el ángulo del brazo simulado, cuantizado a 12 bits con los mismos offsets |
+| CAN | TWAI | no se instala; cuatro RMD simulados siguen la consigna con un retardo de 50 ms y contestan como los de verdad |
+
+El estado lo dice con el **bit 7 de `error_bits`** y las dos vistas de la GUI
+ponen `HARDWARE SIMULADO` en la cabecera. **No flashearlo al robot**: no
+movería nada y el estado diría que todo va bien.
+
+Probado el 28-09-2026 con el ESP32 del banco, el grafo entero
+(`micro_ros:=true gui:=true rviz:=true joy_udp:=true`) y un guion de mando por
+UDP en lugar del puente: los pares suben y bajan con la rampa, la tracción
+satura a 39,75 dps con el stick a fondo, el preset de 0° devuelve los cuatro
+brazos a menos de 0,5° y SHARE deja el estado seguro al instante. El mismo
+guion contra `starcrawler_sim` da los mismos ángulos cuantizados.
 
 ## Versiones
 
@@ -171,8 +216,26 @@ dejaba en `false` para siempre.
 1000 Hz (`CONFIG_FREERTOS_HZ` del sdkconfig). Un sensor desconectado no llega
 a agotarlo: da NACK enseguida. El timeout acota el caso de bus colgado.
 
-Estos dos cambios compilan en seco contra cabeceras de IDF simuladas (4.1 y
-4.4); **falta el `build_firmware.sh` real y probarlos con el bus**.
+Estos dos cambios compilan con el `build_firmware.sh` real (28-09-2026:
+461 920 B, 0 avisos en la app); **falta probarlos con el bus**.
+
+**Encoder caído**: hasta el 28-09 el ángulo de un encoder que no respondía
+quedaba sin inicializar, se publicaba basura y el control de posición la
+usaba sin límites. Ahora se guarda el último ángulo bueno (180 al arrancar) y
+en posición ese brazo se queda parado, como en la versión Arduino. En
+incremental se deja mover a ciegas, también como allí.
+
+**Tracción medida** (28-09): cada RMD contesta a su trama con id + 0x100 y, a
+la de velocidad (0xA2), con su velocidad, corriente y temperatura; el formato
+es el que decodifica `test_motor_diag_simple`, probado con el 0x141. La app lee
+esas respuestas en cada ciclo y `track_speed_left/right` pasa a ser la media de
+los RMD de cada lado que responden, sin la compensación de elevación (antes
+era la consigna). Un RMD sin responder en `RMD_TIMEOUT_MS` (100 ms) marca su
+bit, del 8 al 11 de `error_bits`, y la GUI lo pinta: debería ayudar con la #21
+a ver qué motor se cae del bus. En `HW_SIMULADO` los cuatro responden y la
+velocidad medida sigue a la consigna con su retardo. Queda un transitorio de
+±5 dps al arrancar o parar un brazo: la compensación cambia de golpe y el
+motor tarda en seguirla (<0,3 mm de odometría). **Sin probar con motores**.
 
 CAN, steppers y encoders siguen **sin verificar**: eso solo se ve con el robot
 sobre tacos.

@@ -35,8 +35,9 @@ contrastarlo con el código.
 
 | Cosa | Estado |
 |---|---|
-| Workspace `ros2_ws/` | Verificado: `colcon build` limpio y 101/101 tests (22-09, WSL Ubuntu 22.04 + Humble). Los tests de lint se declaran pero no corren |
-| Robot simulado | Verificado: sim → odometría → GUI en `:8000` (22-09) |
+| Workspace `ros2_ws/` | Verificado: `colcon build` limpio y 127/127 tests (28-09, WSL Ubuntu 22.04 + Humble). Los tests de lint se declaran pero no corren |
+| Robot simulado | Verificado: sim → odometría → GUI en `:8000` (22-09). Desde el 28-09 imita al firmware de micro-ROS (40 dps, watchdog de 300 ms, histéresis 1/0,5°, rampa de la ISR, encoders de 12 bits): el mismo guion de mando da los mismos ángulos que el ESP32 con `HW_SIMULADO` |
+| ESP32 con `HW_SIMULADO` | Verificado (28-09): el firmware real en el ESP32 del banco con la planta simulada dentro, contra el grafo entero y un mando por UDP. Ver el README de la app |
 | App de micro-ROS | Verificado con un ESP32 **sin nada conectado** (22-09): sesión con el agente, `error_bits` 111 (encoders + CAN + watchdog), ~49 Hz a 921600, reconexión en 5 s si el agente se reinicia. ESP-IDF **4.1** (la de `micro_ros_setup` humble), con `idf_compat.h` |
 | GUI y odometría con el ESP32 | Verificado (24-09) contra el ESP32 real: una suscripción fiable recibe 0 mensajes (rclpy avisa `incompatible policy: RELIABILITY`) y una best-effort ~50 Hz; odometría y GUI están en best-effort y la GUI marca `fuente: ros2 · 50 paq/s` sin simulador. **`ros2 topic echo /odom` no sirve para comprobarlo**: la odometría publica por temporizador aunque no le llegue estado |
 | Mando DS4 | Verificado en Windows por el puente UDP (22-09). El mapeo de `ds4.yaml` se corrigió en `7fd599e`. **Sin probar con el nodo `joy` real** del mini PC |
@@ -57,10 +58,13 @@ contrastarlo con el código.
   administrador, luego `usbipd attach --wsl --busid X`, y aparece
   `/dev/ttyUSB0` (no hay udev: usar `port:=/dev/ttyUSB0`). Mientras está en el
   WSL, el COM desaparece de Windows.
-- **micro-ROS** está en `~/microros_ws`. Para recompilar tras tocar la app:
-  copiarla a `firmware/freertos_apps/apps/` y `ros2 run micro_ros_setup
-  build_firmware.sh`. Flashear con `ESPPORT=/dev/ttyUSB0 ros2 run
-  micro_ros_setup flash_firmware.sh`.
+- **micro-ROS** está en `~/microros_ws`. Tras tocar la app:
+  `./micro_ros_esp32_apps/firmware.sh compilar [--simulado]` y
+  `./micro_ros_esp32_apps/firmware.sh flashear /dev/ttyUSB0`. Compila en
+  ~1 min; el firmware real ocupa 461 920 B y el simulado 444 992 B (28-09).
+- **El WSL se apaga** si no queda ningún proceso: `usbipd attach` falla con
+  "There is no WSL 2 distribution running". Dejar una terminal del WSL abierta
+  (o un `sleep` largo) mientras el ESP32 esté enganchado.
 
 Trampas ya encontradas:
 
@@ -226,21 +230,24 @@ ros2_ws/src/
   starcrawler_common/       conversión de ángulos, única fuente de verdad
   starcrawler_driver/       puente serie con CRC16 (el camino anterior)
   starcrawler_sim/          robot simulado a nivel de tópicos
-  starcrawler_odometry/     odometría de orugas y TF odom -> base_footprint
+  starcrawler_odometry/     odometría de orugas (TF odom -> base_footprint) y
+                            chasis_node, el chasis apoyado en sus orugas
   starcrawler_teleop/       mando DS4, joy_udp_node y twist_mux
   starcrawler_gui/          interfaz web: :8000 y :8000/3d
   starcrawler_description/  URDF y configuraciones de RViz
   starcrawler_bringup/      launch, systemd y udev
 
 micro_ros_esp32_apps/starcrawler_app/   el ESP32 como nodo ROS 2
+micro_ros_esp32_apps/firmware.sh        compilar (--simulado) y flashear la app
 tools/joy_bridge/                       el mando de Windows al WSL
 scripts/                                instalación y arranque del mini PC
 docs/ros2.md                            arquitectura y puesta en marcha
 ```
 
 El launch elige de dónde sale el estado del robot, y son excluyentes: el
-agente de micro-ROS (`micro_ros:=true`, el camino actual), el simulador
-(`sim:=true`) o el driver serie (por defecto, el camino anterior).
+agente de micro-ROS (por defecto desde el 28-09, como Donatello), el
+simulador (`sim:=true`) o el driver serie (`micro_ros:=false`, el camino
+anterior; `simulate:=true` con su ESP32 simulado).
 
 ---
 
