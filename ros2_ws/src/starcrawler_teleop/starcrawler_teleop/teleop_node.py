@@ -4,8 +4,13 @@ teleop_node.py — mando -> consignas ROS
 =======================================
 Lee /joy (nodo `joy`, mando conectado al PC de a bordo) y publica:
 
-    /cmd_vel          geometry_msgs/Twist
-    /crawler/command  starcrawler_msgs/CrawlerCommand
+    cmd_vel                  geometry_msgs/Twist
+    crawler/command          starcrawler_msgs/CrawlerCommand
+    cmd_vel_activo           lo mismo, solo mientras el DS4 esta tocado
+    crawler/command_activo   (Salida.activo)
+
+Los nombres son relativos: el launch los remapea a las fuentes joy y
+joy_activo de twist_mux y crawler_mux.
 
 La logica esta en joy_logic.py (modulo puro con tests). Este nodo solo hace de
 envoltorio ROS: carga el mapeo desde parametros y publica.
@@ -20,7 +25,9 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import Joy
+from std_msgs.msg import String
 from starcrawler_msgs.msg import CrawlerCommand
 
 from .joy_logic import Ajustes, LogicaMando, Mapeo, N_ORUGAS
@@ -66,8 +73,12 @@ class StarCrawlerTeleop(Node):
 
         self.declare_parameter('rate_hz', 50.0)
         self.declare_parameter('joy_timeout_s', 0.5)
+        # Etiquetas de crawler_mux/activa que son este nodo
+        self.declare_parameter('fuentes_propias', ['joy', 'joy_activo'])
         rate = float(self.get_parameter('rate_hz').value)
         self.joy_timeout = float(self.get_parameter('joy_timeout_s').value)
+        self.fuentes_propias = set(
+            self.get_parameter('fuentes_propias').value)
 
         self.logica = LogicaMando(m, a)
         self.joy: Joy | None = None
@@ -75,9 +86,17 @@ class StarCrawlerTeleop(Node):
         self.aviso_dado = False
 
         self.create_subscription(Joy, 'joy', self.cb_joy, 10)
+        # crawler_mux la publica latcheada y solo al cambiar
+        self.create_subscription(
+            String, 'crawler_mux/activa', self.cb_activa,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.pub_vel = self.create_publisher(Twist, 'cmd_vel', 10)
         self.pub_crawler = self.create_publisher(
             CrawlerCommand, 'crawler/command', 10)
+        self.pub_vel_activo = self.create_publisher(
+            Twist, 'cmd_vel_activo', 10)
+        self.pub_crawler_activo = self.create_publisher(
+            CrawlerCommand, 'crawler/command_activo', 10)
         self.create_timer(1.0 / rate, self.publicar)
 
         self.get_logger().info(
@@ -90,6 +109,11 @@ class StarCrawlerTeleop(Node):
         self.joy = msg
         self.t_joy = self.ahora()
         self.aviso_dado = False
+
+    def cb_activa(self, msg: String) -> None:
+        # Si ha mandado otra fuente, la pose del DS4 no vuelve al soltarla
+        if msg.data != '' and msg.data not in self.fuentes_propias:
+            self.logica.cancelar_preset()
 
     def publicar(self) -> None:
         t = self.ahora()
@@ -106,9 +130,11 @@ class StarCrawlerTeleop(Node):
         if t - self.t_joy > self.joy_timeout:
             # Mando perdido a mitad de uso: ceros explicitos (el ESP32 para
             # igual por watchdog, esto solo evita repetir la ultima consigna).
+            # Nada por el canal activo, y la pose enganchada se olvida.
             if not self.aviso_dado:
                 self.get_logger().warn('Sin datos de /joy: enviando parada.')
                 self.aviso_dado = True
+            self.logica.cancelar_preset()
             cmd.increment = [0] * N_ORUGAS
             self.pub_vel.publish(vel)
             self.pub_crawler.publish(cmd)
@@ -126,6 +152,9 @@ class StarCrawlerTeleop(Node):
 
         self.pub_vel.publish(vel)
         self.pub_crawler.publish(cmd)
+        if s.activo:
+            self.pub_vel_activo.publish(vel)
+            self.pub_crawler_activo.publish(cmd)
 
 
 def main(args=None) -> None:

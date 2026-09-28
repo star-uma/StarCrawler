@@ -15,6 +15,9 @@ la traccion esta SIEMPRE activa y las orugas se mueven superpuestas.
 
 Modulo PURO: no importa rclpy. Probado en test/test_joy_logic.py.
 
+El esquema (pares, inclinaciones, presets, topes) vive en
+starcrawler_common.orugas, compartido con el mando web.
+
 Nota sobre los presets: en el TFG las poses se daban en grados de encoder
 (225/180/135/90) y habia que espejar FL y RR. Aqui se trabaja en ELEVACION
 (positivo = brazo levantado), donde la pose es simetrica y las cuatro orugas
@@ -27,15 +30,23 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence
 
-N_ORUGAS = 4
+from starcrawler_common.orugas import (  # noqa: F401
+    FACTOR_LENTO,
+    INCLINACIONES,
+    MAX_ANGULAR,
+    MAX_LINEAL,
+    N_ORUGAS,
+    PAR_DELANTERO,
+    PAR_TRASERO,
+    PRESETS_DEG,
+    S_PRESET,
+    componer_incremento,
+    inclinacion,
+    traccion,
+)
 
-# Comando incremental para SUBIR cada par (en elevacion, +1 = subir)
-PAR_DELANTERO = (1, 1, 0, 0)   # FR, FL
-PAR_TRASERO = (0, 0, 1, 1)     # RR, RL
-
-# Presets de pose, en grados de ELEVACION (equivalen a 225/180/135/90 de
-# encoder en la referencia F.R. del TFG)
-PRESETS_DEG = (-45.0, 0.0, 45.0, 90.0)
+# Tras la ultima entrada, el DS4 sigue mandando por el canal activo
+S_COLA_ACTIVO = 0.2
 
 
 @dataclass
@@ -84,10 +95,10 @@ class Mapeo:
 class Ajustes:
     zona_muerta: float = 0.08
     umbral_eje: float = 0.5          # para tratar gatillos/cruceta como digital
-    max_lineal: float = 0.053        # m/s  (40 dps con r=0.0764 m)
-    max_angular: float = 0.20        # rad/s (40 dps por lado, L=0.524 m)
-    factor_lento: float = 0.5
-    s_preset: float = 0.5            # mantener el boton para activar la pose
+    max_lineal: float = MAX_LINEAL   # m/s
+    max_angular: float = MAX_ANGULAR  # rad/s
+    factor_lento: float = FACTOR_LENTO
+    s_preset: float = S_PRESET       # mantener el boton para activar la pose
 
 
 @dataclass
@@ -100,6 +111,8 @@ class Salida:
     emergencia: bool = False
     velocidad_lenta: bool = False
     nivelar: bool = False
+    # DS4 tocado hace menos de S_COLA_ACTIVO: tambien va al canal activo
+    activo: bool = False
 
 
 def deadzone(valor: float, zona: float) -> float:
@@ -109,10 +122,6 @@ def deadzone(valor: float, zona: float) -> float:
         return 0.0
     signo = 1.0 if valor > 0 else -1.0
     return signo * (mag - zona) / (1.0 - zona)
-
-
-def _signo(v: int) -> int:
-    return 1 if v > 0 else (-1 if v < 0 else 0)
 
 
 class LogicaMando:
@@ -129,6 +138,13 @@ class LogicaMando:
         self._t_preset = 0.0
         self._posicion_vigente = False
         self._objetivo_rad = [0.0] * N_ORUGAS
+        self._t_activo = -math.inf
+
+    def cancelar_preset(self) -> None:
+        """Olvida la pose enganchada; para volver a aplicarla hay que
+        mantener otra vez el boton."""
+        self._posicion_vigente = False
+        self._preset_pulsado = -1
 
     # ─── Lectura del mensaje Joy ─────────────────────────────────────────
 
@@ -182,13 +198,14 @@ class LogicaMando:
 
         # Parada de emergencia: manda sobre todo
         if self._boton(botones, m.boton_share):
-            self._posicion_vigente = False
-            self._preset_pulsado = -1
+            self.cancelar_preset()
             out.emergencia = True
+            out.activo = self._marcar_activo(True, t)
             return out
 
         # Deadman opcional
         if m.boton_enable >= 0 and not self._boton(botones, m.boton_enable):
+            out.activo = self._marcar_activo(False, t)
             return out
 
         # Traccion (siempre activa)
@@ -199,30 +216,22 @@ class LogicaMando:
         if m.invertir_giro:
             gi = -gi
         factor = a.factor_lento if self.velocidad_lenta else 1.0
-        out.lineal = av * a.max_lineal * factor
-        # Convencion ROS: angular.z positivo = giro a la IZQUIERDA. 'gi' ya
-        # esta normalizado a positivo = stick a la derecha, de ahi el signo.
-        out.angular = -gi * a.max_angular * factor
+        # gi + = stick a la derecha -> angular.z negativo (convencion ROS)
+        out.lineal, out.angular = traccion(av, gi, factor,
+                                           a.max_lineal, a.max_angular)
 
         # Orugas: pares + cruceta, sumados y saturados
-        manual = [0] * N_ORUGAS
-        sentido_del = ((1 if self._boton(botones, m.boton_l1) else 0)
-                       - (1 if self._gatillo(ejes, botones, m.boton_l2, m.eje_l2) else 0))
-        sentido_tra = ((1 if self._boton(botones, m.boton_r1) else 0)
-                       - (1 if self._gatillo(ejes, botones, m.boton_r2, m.eje_r2) else 0))
-        for i in range(N_ORUGAS):
-            manual[i] += sentido_del * PAR_DELANTERO[i]
-            manual[i] += sentido_tra * PAR_TRASERO[i]
+        l1 = self._boton(botones, m.boton_l1)
+        l2 = self._gatillo(ejes, botones, m.boton_l2, m.eje_l2)
+        r1 = self._boton(botones, m.boton_r1)
+        r2 = self._gatillo(ejes, botones, m.boton_r2, m.eje_r2)
+        sentido_del = int(l1) - int(l2)
+        sentido_tra = int(r1) - int(r2)
+        cruceta = self._cruceta(ejes, botones)
+        inclinar = self._inclinacion(*cruceta)
+        out.incremento = componer_incremento(sentido_del, sentido_tra, inclinar)
 
-        arriba, abajo, izq, der = self._cruceta(ejes, botones)
-        inclinacion = self._inclinacion(arriba, abajo, izq, der)
-        hay_manual = sentido_del != 0 or sentido_tra != 0
-        for i in range(N_ORUGAS):
-            manual[i] += inclinacion[i]
-            if inclinacion[i] != 0:
-                hay_manual = True
-            out.incremento[i] = _signo(manual[i])
-
+        hay_manual = sentido_del != 0 or sentido_tra != 0 or any(inclinar)
         if hay_manual:
             self._posicion_vigente = False
 
@@ -249,24 +258,22 @@ class LogicaMando:
             out.incremento = [0] * N_ORUGAS
 
         out.nivelar = self._boton(botones, m.boton_options)
+
+        # L3, OPTIONS y la pose ya enganchada no cuentan como tocar el mando
+        tocado = (av != 0.0 or gi != 0.0 or l1 or l2 or r1 or r2
+                  or any(cruceta) or pulsado >= 0)
+        out.activo = self._marcar_activo(tocado, t)
         return out
+
+    def _marcar_activo(self, tocado: bool, t: float) -> bool:
+        if tocado:
+            self._t_activo = t
+        return t - self._t_activo <= S_COLA_ACTIVO
 
     @staticmethod
     def _inclinacion(arriba: bool, abajo: bool, izq: bool, der: bool) -> List[int]:
-        """Cruceta -> inclinar el conjunto. Es el modo 3 del TFG traducido a
-        ELEVACION (+1 = ese brazo sube). Al subir los brazos de un extremo, ese
-        extremo del chasis pierde apoyo y baja.
-
-        Equivalencias con los vectores en grados de encoder del TFG:
-            arriba {-1,1,-1,1} -> {+1,+1,-1,-1}   abajo  { 1,-1, 1,-1} -> {-1,-1,+1,+1}
-            izq    { 1,1,-1,-1} -> {-1,+1,-1,+1}   der    {-1,-1, 1, 1} -> {+1,-1,+1,-1}
-        """
-        if arriba and not (abajo or izq or der):
-            return [1, 1, -1, -1]     # suben delanteras -> inclinar adelante
-        if abajo and not (arriba or izq or der):
-            return [-1, -1, 1, 1]     # suben traseras   -> inclinar atras
-        if izq and not (arriba or abajo or der):
-            return [-1, 1, -1, 1]     # suben las del lado izquierdo
-        if der and not (arriba or abajo or izq):
-            return [1, -1, 1, -1]     # suben las del lado derecho
-        return [0, 0, 0, 0]
+        """Cruceta -> inclinar el conjunto (ver orugas.inclinacion). Solo con
+        un sentido pulsado; en diagonal no inclina."""
+        pulsados = [s for s, p in zip(INCLINACIONES, (arriba, abajo, izq, der))
+                    if p]
+        return inclinacion(pulsados[0] if len(pulsados) == 1 else None)

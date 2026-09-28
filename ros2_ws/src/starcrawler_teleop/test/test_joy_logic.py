@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from starcrawler_teleop.joy_logic import (      # noqa: E402
-    Ajustes, LogicaMando, Mapeo, deadzone)
+    Ajustes, LogicaMando, Mapeo, S_COLA_ACTIVO, deadzone)
 
 N_EJES = 8
 N_BOTONES = 14
@@ -261,3 +261,107 @@ def test_cambiar_de_preset_reinicia_el_temporizador():
     s = lg.procesar(ejes(), botones(2), 0.4)     # cambia de boton
     assert not s.usar_posicion
     assert lg.procesar(ejes(), botones(2), 1.0).usar_posicion
+
+
+def test_cancelar_preset():
+    lg = logica()
+    lg.procesar(ejes(), botones(1), 0.0)
+    assert lg.procesar(ejes(), botones(1), 0.6).usar_posicion
+    lg.cancelar_preset()
+    assert not lg.procesar(ejes(), botones(), 0.7).usar_posicion
+
+
+def test_tras_cancelar_hay_que_volver_a_mantener_el_boton():
+    lg = logica()
+    lg.procesar(ejes(), botones(1), 0.0)
+    assert lg.procesar(ejes(), botones(1), 0.6).usar_posicion
+    lg.cancelar_preset()
+    assert not lg.procesar(ejes(), botones(1), 0.7).usar_posicion
+    assert not lg.procesar(ejes(), botones(1), 1.1).usar_posicion
+    assert lg.procesar(ejes(), botones(1), 1.25).usar_posicion
+
+
+# ─── Canal activo: el DS4 tocado gana a la web ───────────────────────────────
+
+ENTRADAS_ACTIVAS = {
+    'avance': (ejes(a1=0.5), botones()),
+    'giro': (ejes(a3=-0.5), botones()),
+    'l1': (ejes(), botones(4)),
+    'l2': (ejes(), botones(6)),
+    'r1': (ejes(), botones(5)),
+    'r2': (ejes(), botones(7)),
+    'cruceta_arriba': (ejes(a7=1.0), botones()),
+    'cruceta_abajo': (ejes(a7=-1.0), botones()),
+    'cruceta_izq': (ejes(a6=1.0), botones()),
+    'cruceta_der': (ejes(a6=-1.0), botones()),
+    'cruceta_diagonal': (ejes(a6=1.0, a7=1.0), botones()),
+    'pares_opuestos': (ejes(), botones(4, 6)),
+    'preset_pulsado': (ejes(), botones(3)),
+    'share': (ejes(), botones(8)),
+}
+
+ENTRADAS_NEUTRAS = {
+    'reposo': (ejes(), botones()),
+    'zona_muerta': (ejes(a1=0.05, a3=-0.05), botones()),
+    'l3': (ejes(), botones(11)),
+    'options': (ejes(), botones(9)),
+}
+
+
+@pytest.mark.parametrize('e, b', list(ENTRADAS_ACTIVAS.values()),
+                         ids=list(ENTRADAS_ACTIVAS))
+def test_cada_entrada_activa_el_canal(e, b):
+    assert logica().procesar(e, b, 0.0).activo
+
+
+@pytest.mark.parametrize('e, b', list(ENTRADAS_NEUTRAS.values()),
+                         ids=list(ENTRADAS_NEUTRAS))
+def test_lo_neutro_no_activa(e, b):
+    assert not logica().procesar(e, b, 0.0).activo
+
+
+def test_gatillo_analogico_activa():
+    m = Mapeo()
+    m.eje_r2 = 5
+    lg = LogicaMando(m, Ajustes())
+    assert not lg.procesar(ejes(a5=-1.0), botones(), 0.0).activo   # suelto
+    assert lg.procesar(ejes(a5=0.8), botones(), 1.0).activo
+
+
+def test_cola_tras_soltar():
+    lg = logica()
+    assert lg.procesar(ejes(), botones(4), 0.0).activo
+    assert lg.procesar(ejes(), botones(), S_COLA_ACTIVO / 2).activo
+    assert not lg.procesar(ejes(), botones(), S_COLA_ACTIVO * 1.5).activo
+
+
+def test_la_cola_cuenta_desde_la_ultima_entrada():
+    lg = logica()
+    for t in (0.0, 0.1, 0.2, 0.3):
+        lg.procesar(ejes(a1=1.0), botones(), t)
+    assert lg.procesar(ejes(), botones(), 0.3 + S_COLA_ACTIVO / 2).activo
+    assert not lg.procesar(ejes(), botones(), 0.3 + S_COLA_ACTIVO * 1.5).activo
+
+
+def test_cola_de_la_emergencia():
+    lg = logica()
+    assert lg.procesar(ejes(), botones(8), 0.0).activo
+    s = lg.procesar(ejes(), botones(), S_COLA_ACTIVO / 2)
+    assert s.activo and not s.emergencia
+
+
+def test_preset_enganchado_no_cuenta_como_activo():
+    lg = logica()
+    lg.procesar(ejes(), botones(1), 0.0)
+    s = lg.procesar(ejes(), botones(1), 0.6)
+    assert s.usar_posicion and s.activo           # el boton sigue pulsado
+    s = lg.procesar(ejes(), botones(), 0.6 + S_COLA_ACTIVO * 1.5)
+    assert s.usar_posicion and not s.activo
+
+
+def test_deadman_suelto_no_activa_salvo_share():
+    m = Mapeo()
+    m.boton_enable = 10
+    lg = LogicaMando(m, Ajustes())
+    assert not lg.procesar(ejes(a1=-1.0), botones(4), 0.0).activo
+    assert lg.procesar(ejes(), botones(8), 1.0).activo
