@@ -9,6 +9,8 @@ float64[4] crawler_angle
 bool[4] encoder_ok
 
 # Velocidad de cada tren de traccion (rad/s en el eje de salida del RMD).
+# Con micro-ROS es la que miden los RMD, media de los que responden y sin la
+# compensacion de elevacion; el firmware serie publica la consigna.
 float64 track_speed_left
 float64 track_speed_right
 
@@ -19,7 +21,8 @@ bool safety_active       # true = el ESP32 esta en estado seguro
 
 # Bits de error tal cual los reporta el firmware (ver control_core.h):
 # 0..3 encoder FR/FL/RR/RL, 4 IMU, 5 CAN, 6 watchdog,
-# 7 hardware simulado (no es el robot: HW_SIMULADO o starcrawler_sim)
+# 7 hardware simulado (no es el robot: HW_SIMULADO o starcrawler_sim),
+# 8..11 RMD FR/FL/RR/RL sin responder (solo micro-ROS)
 uint16 error_bits
 
 # Salud del enlace serie PC <-> ESP32

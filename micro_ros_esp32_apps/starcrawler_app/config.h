@@ -48,6 +48,8 @@
 #define CAN_ID_RL 0x144
 
 #define VEL_MAX_DPS          40.0f
+/* Sin respuesta de un RMD en este tiempo, ese motor cuenta como caido */
+#define RMD_TIMEOUT_MS       100
 #define RATE_LIMIT_DPS_CICLO 4.0f
 #define CAN_INTER_FRAME_US   250
 

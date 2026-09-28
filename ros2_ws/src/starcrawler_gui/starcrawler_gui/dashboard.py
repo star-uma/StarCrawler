@@ -321,7 +321,8 @@ function pintar(s, t) {
   // Chips de estado (icono + etiqueta: nunca solo color)
   const bits = [[0,'ENC FR'],[1,'ENC FL'],[2,'ENC RR'],[3,'ENC RL']];
   if (s.con_imu) bits.push([4,'IMU']);
-  bits.push([5,'CAN'],[6,'WATCHDOG']);
+  bits.push([5,'CAN'],[6,'WATCHDOG'],
+            [8,'RMD FR'],[9,'RMD FL'],[10,'RMD RR'],[11,'RMD RL']);
   document.getElementById('chips').innerHTML = bits.map(([b, nom]) => {
     const mal = (s.err >> b) & 1;
     return `<span class="chip${mal ? ' mal' : ''}">${mal ? '✕' : '✓'} <b>${nom}</b></span>`;

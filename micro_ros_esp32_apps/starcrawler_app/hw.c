@@ -45,30 +45,98 @@ uint32_t hw_millis(void) {
 
 #if HW_SIMULADO
 
-/* La app no lee las respuestas de los RMD: basta con aceptar las tramas */
-bool canbus_init(void) { return true; }
+/* RMD simulados: siguen la consigna con un retardo de primer orden y
+ * contestan cada trama como los de verdad (id + 0x100, mismo comando, la
+ * velocidad en dps enteros). La cola es la del TWAI: si se llena, se pierde. */
+#define SIM_RMD_TAU_S   0.05f
+#define SIM_RMD_COLA    16
+
+static const uint32_t idsRmd[CC_NUM_ORUGAS] = {
+    CAN_ID_FR, CAN_ID_FL, CAN_ID_RR, CAN_ID_RL
+};
+static float    consignaRmd[CC_NUM_ORUGAS];
+static float    velRmd[CC_NUM_ORUGAS];
+static bool     libreRmd[CC_NUM_ORUGAS] = {true, true, true, true};
+static uint32_t colaId[SIM_RMD_COLA];
+static uint8_t  colaDatos[SIM_RMD_COLA][8];
+static int      colaIni, colaN;
+static int64_t  usAnterior;
+/* liberarTraccion() tambien se llama desde el nucleo 0 antes de reiniciar */
+static portMUX_TYPE muxCan = portMUX_INITIALIZER_UNLOCKED;
+
+bool canbus_init(void) {
+    usAnterior = esp_timer_get_time();
+    return true;
+}
 
 bool canbus_enviar(uint32_t id, const uint8_t datos[8]) {
-    (void)id;
-    (void)datos;
+    for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+        if (id != idsRmd[i]) continue;
+        uint8_t r[8] = {datos[0], 0, 0, 0, 0, 0, 0, 0};
+        portENTER_CRITICAL(&muxCan);
+        if (datos[0] == 0xA2) {
+            const int32_t c = (int32_t)((uint32_t)datos[4] |
+                                        ((uint32_t)datos[5] << 8) |
+                                        ((uint32_t)datos[6] << 16) |
+                                        ((uint32_t)datos[7] << 24));
+            consignaRmd[i] = (float)c / 100.0f;
+            libreRmd[i] = false;
+            const int16_t v = (int16_t)lrintf(velRmd[i]);
+            r[1] = 30;                                  /* temperatura, C */
+            r[4] = (uint8_t)((uint16_t)v & 0xFF);
+            r[5] = (uint8_t)(((uint16_t)v >> 8) & 0xFF);
+        } else if (datos[0] == 0x80) {
+            libreRmd[i] = true;
+        }
+        if (colaN < SIM_RMD_COLA) {
+            const int k = (colaIni + colaN) % SIM_RMD_COLA;
+            colaId[k] = id + 0x100;
+            memcpy(colaDatos[k], r, 8);
+            colaN++;
+        }
+        portEXIT_CRITICAL(&muxCan);
+        return true;
+    }
     return true;
 }
 
 bool canbus_recibir(uint32_t *id, uint8_t datos[8]) {
-    (void)id;
-    (void)datos;
-    return false;
+    bool hay = false;
+    portENTER_CRITICAL(&muxCan);
+    if (colaN > 0) {
+        *id = colaId[colaIni];
+        memcpy(datos, colaDatos[colaIni], 8);
+        colaIni = (colaIni + 1) % SIM_RMD_COLA;
+        colaN--;
+        hay = true;
+    }
+    portEXIT_CRITICAL(&muxCan);
+    return hay;
 }
 
-void canbus_atender(void) {}
+/* Integra la velocidad de los motores; el liberado se para por rozamiento */
+void canbus_atender(void) {
+    const int64_t us = esp_timer_get_time();
+    float dt = (float)(us - usAnterior) * 1e-6f;
+    usAnterior = us;
+    if (dt > 0.1f) dt = 0.1f;
+    const float k = dt / (SIM_RMD_TAU_S + dt);
+    portENTER_CRITICAL(&muxCan);
+    for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+        const float objetivo = libreRmd[i] ? 0.0f : consignaRmd[i];
+        velRmd[i] += (objetivo - velRmd[i]) * k;
+    }
+    portEXIT_CRITICAL(&muxCan);
+}
 
 #else
 
 bool canbus_init(void) {
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
         (gpio_num_t)PIN_TWAI_TX, (gpio_num_t)PIN_TWAI_RX, TWAI_MODE_NORMAL);
+    /* En seguridad se liberan los cuatro en cada ciclo: 4 respuestas / 10 ms */
     g.tx_queue_len = 8;
-    g.rx_queue_len = 8;
+    g.rx_queue_len = 16;
     twai_timing_config_t t = TWAI_TIMING_CONFIG_1MBITS();
     twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 

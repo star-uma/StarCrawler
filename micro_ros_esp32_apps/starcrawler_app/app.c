@@ -230,6 +230,12 @@ static void TaskControl(void *arg) {
     int8_t ultimoCmd[CC_NUM_ORUGAS] = {0, 0, 0, 0};
     /* Ultimo angulo bueno de cada encoder, como en la version Arduino */
     float ang[CC_NUM_ORUGAS] = {180.0f, 180.0f, 180.0f, 180.0f};
+    /* Lo ultimo que dijo cada RMD, y la compensacion que llevaba su trama:
+     * se descuenta para quedarse con la velocidad de la banda */
+    float    velMotor[CC_NUM_ORUGAS]    = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    compEnviada[CC_NUM_ORUGAS] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t msMotor[CC_NUM_ORUGAS]     = {0, 0, 0, 0};
+    bool     respondio[CC_NUM_ORUGAS]   = {false, false, false, false};
     uint32_t ciclo = 0;
 
     TickType_t ultimoDespertar = xTaskGetTickCount();
@@ -238,6 +244,20 @@ static void TaskControl(void *arg) {
     for (;;) {
         ciclo++;
         canbus_atender();
+        const uint32_t ahora = hw_millis();
+
+        /* 0. Respuestas de los RMD a las tramas anteriores */
+        uint32_t idRx;
+        uint8_t  rx[8];
+        cc_RespuestaRMD resp;
+        while (canbus_recibir(&idRx, rx)) {
+            const int m = cc_leerRespuestaRMD(idRx, rx, CAN_ID, &resp);
+            if (m < 0) continue;
+            respondio[m] = true;
+            msMotor[m]   = ahora;
+            /* La de 0x80 (liberado) no trae medida */
+            velMotor[m]  = (resp.comando == 0xA2) ? (float)resp.velocidad_dps : 0.0f;
+        }
 
         /* 1. Leer los cuatro encoders */
         bool  ok[CC_NUM_ORUGAS];
@@ -264,7 +284,6 @@ static void TaskControl(void *arg) {
         portEXIT_CRITICAL(&mux);
 
         /* 3. Watchdog de consigna: sin ordenes frescas, estado seguro */
-        const uint32_t ahora = hw_millis();
         const bool vencido = cc_watchdogExpirado(
             ahora, (uint32_t)tickComando, WATCHDOG_TIMEOUT_MS);
 
@@ -276,6 +295,7 @@ static void TaskControl(void *arg) {
             for (int i = 0; i < CC_NUM_ORUGAS; i++) {
                 enMarcha[i] = false;
                 ultimoCmd[i] = 0;
+                compEnviada[i] = 0.0f;
             }
             if (vencido) errores |= CC_ERR_WATCHDOG;
         } else {
@@ -311,32 +331,50 @@ static void TaskControl(void *arg) {
                 for (int i = 0; i < CC_NUM_ORUGAS; i++) {
                     /* Lado izquierdo invertido, como en el firmware original */
                     const bool izquierda = (i == 1 || i == 3);  /* FL, RL */
-                    float v = izquierda ? -velIzqActual : velDerActual;
+                    const float v = izquierda ? -velIzqActual : velDerActual;
 
+                    float comp = 0.0f;
 #if COMPENSACION_TRACCION
                     /* Mientras la oruga bascula, su RMD gira para que la
                      * banda no arrastre. En este esquema se suma. */
                     if (ultimoCmd[i] != 0) {
-                        const float comp = (ultimoCmd[i] > 0)
-                            ? -COMPENSACION_DPS : COMPENSACION_DPS;
-                        v += comp * SIGNO_COMPENSACION[i];
+                        comp = ((ultimoCmd[i] > 0) ? -COMPENSACION_DPS
+                                                   : COMPENSACION_DPS)
+                             * SIGNO_COMPENSACION[i];
                     }
 #endif
-                    if (!enviarVelocidadRMD(CAN_ID[i], v)) envioOk = false;
+                    compEnviada[i] = comp;
+                    if (!enviarVelocidadRMD(CAN_ID[i], v + comp)) envioOk = false;
                     esp_rom_delay_us(CAN_INTER_FRAME_US);
                 }
                 canOk = envioOk;
             }
         }
 
-        /* 6. Publicar el estado para la tarea de micro-ROS */
+        /* 6. Velocidad de cada lado segun sus RMD, sin la compensacion. El
+         * que no ha respondido en RMD_TIMEOUT_MS no cuenta y lo marca su bit */
+        float suma[2] = {0.0f, 0.0f};     /* [0] derecha, [1] izquierda */
+        int   vivos[2] = {0, 0};
+        for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+            const int izquierda = (i == 1 || i == 3);
+            if (!respondio[i] ||
+                (uint32_t)(ahora - msMotor[i]) > RMD_TIMEOUT_MS) {
+                errores |= CC_ERR_RMD(i);
+                continue;
+            }
+            const float banda = velMotor[i] - compEnviada[i];
+            suma[izquierda] += izquierda ? -banda : banda;
+            vivos[izquierda]++;
+        }
+
+        /* 7. Publicar el estado para la tarea de micro-ROS */
         portENTER_CRITICAL(&mux);
         for (int i = 0; i < CC_NUM_ORUGAS; i++) {
             anguloDeg[i] = ang[i];
             encoderOk[i] = ok[i];
         }
-        velIzqReal  = velIzqActual;
-        velDerReal  = velDerActual;
+        velIzqReal  = vivos[1] ? suma[1] / vivos[1] : 0.0f;
+        velDerReal  = vivos[0] ? suma[0] / vivos[0] : 0.0f;
         enSeguridad = (emer || vencido);
         bitsError   = errores | (canOk ? 0 : CC_ERR_CAN)
                     | (HW_SIMULADO ? HW_ERR_SIMULADO : 0);
