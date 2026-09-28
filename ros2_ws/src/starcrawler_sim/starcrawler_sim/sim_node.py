@@ -21,6 +21,7 @@ aquel deja de servir y este sigue valiendo.
 """
 from __future__ import annotations
 
+import math
 import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -93,6 +94,12 @@ class NodoSimulador(Node):
     # --- Entradas --------------------------------------------------------
 
     def cb_cmd_vel(self, msg: Twist):
+        # Como en app.c, un campo no finito descarta el mensaje; un desborde
+        # en la cuenta lo descarta consigna_traccion
+        campos = (msg.linear.x, msg.linear.y, msg.linear.z,
+                  msg.angular.x, msg.angular.y, msg.angular.z)
+        if not all(math.isfinite(c) for c in campos):
+            return
         # Cinematica inversa del diferencial, igual que hace el firmware
         v_izq = msg.linear.x - (self.separacion / 2.0) * msg.angular.z
         v_der = msg.linear.x + (self.separacion / 2.0) * msg.angular.z
@@ -103,7 +110,8 @@ class NodoSimulador(Node):
     def cb_crawler(self, msg: CrawlerCommand):
         # increment viene en convenio de elevacion (+1 sube el brazo); el
         # modelo trabaja en grados de encoder, donde subir puede ser
-        # aumentar o disminuir segun el espejado de cada oruga.
+        # aumentar o disminuir segun el espejado de cada oruga. Un target no
+        # finito lo descarta consigna_orugas.
         incrementos = []
         objetivos = []
         for i in range(N_ORUGAS):

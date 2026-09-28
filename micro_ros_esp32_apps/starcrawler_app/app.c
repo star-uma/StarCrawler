@@ -124,7 +124,12 @@ static bool     enSeguridad = true;
 static uint16_t bitsError  = 0;
 
 static volatile int64_t tickExecutor = 0;
-static volatile int64_t tickComando  = 0;
+
+/* Ultimo mensaje valido de cada topico, en hw_millis(). /crawler/command
+ * es el latido de la parada: sin el, estado seguro. Sin /cmd_vel, la
+ * traccion baja a 0 con par. */
+static volatile uint32_t msCmdVel  = 0;
+static volatile uint32_t msCrawler = 0;
 
 /* Nombres de las articulaciones, en el orden {FR, FL, RR, RL} */
 static const char *NOMBRE_JOINT[CC_NUM_ORUGAS] = {
@@ -161,8 +166,15 @@ static float encoderAElevacionRad(int i, float encoderDeg) {
 
 /* --- Callbacks de las suscripciones ---------------------------------- */
 
+/* Un NaN pasa por cc_saturar y por la rampa: esos mensajes se descartan
+ * sin refrescar la marca, como si no hubieran llegado. */
+static bool vectorFinito(const geometry_msgs__msg__Vector3 *v) {
+    return isfinite(v->x) && isfinite(v->y) && isfinite(v->z);
+}
+
 static void cb_cmd_vel(const void *msgin) {
     const geometry_msgs__msg__Twist *m = (const geometry_msgs__msg__Twist *)msgin;
+    if (!vectorFinito(&m->linear) || !vectorFinito(&m->angular)) return;
 
     /* Cinematica inversa de un diferencial: cada via a su velocidad
      * lineal, y de ahi a grados por segundo del eje del RMD. */
@@ -174,19 +186,26 @@ static void cb_cmd_vel(const void *msgin) {
 
     const float dpsIzq = (vIzq / RADIO_POLEA_M) * RAD_A_GRADOS;
     const float dpsDer = (vDer / RADIO_POLEA_M) * RAD_A_GRADOS;
+    /* Un double finito enorme desborda el float */
+    if (!isfinite(dpsIzq) || !isfinite(dpsDer)) return;
 
+    const uint32_t ahora = hw_millis();
     portENTER_CRITICAL(&mux);
     consignaIzqDps = cc_saturar(dpsIzq, VEL_MAX_DPS);
     consignaDerDps = cc_saturar(dpsDer, VEL_MAX_DPS);
+    msCmdVel = ahora;
     portEXIT_CRITICAL(&mux);
-
-    tickComando = (int64_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
 
 static void cb_crawler(const void *msgin) {
     const starcrawler_msgs__msg__CrawlerCommand *m =
         (const starcrawler_msgs__msg__CrawlerCommand *)msgin;
+    /* Con el cast cae tambien el double que no cabe en un float */
+    for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+        if (!isfinite((float)m->target[i])) return;
+    }
 
+    const uint32_t ahora = hw_millis();
     portENTER_CRITICAL(&mux);
     emergencia   = m->emergency_stop;
     usarPosicion = m->use_position;
@@ -198,9 +217,8 @@ static void cb_crawler(const void *msgin) {
         consignaCmd[i] = esEspejada(i) ? inc : (int8_t)(-inc);
         consignaObjDeg[i] = elevacionAEncoderDeg(i, (float)m->target[i]);
     }
+    msCrawler = ahora;
     portEXIT_CRITICAL(&mux);
-
-    tickComando = (int64_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
 
 /* --- Traccion --------------------------------------------------------- */
@@ -244,6 +262,10 @@ static void TaskControl(void *arg) {
     for (;;) {
         ciclo++;
         canbus_atender();
+        /* Las marcas antes que la hora: una marca posterior a ahora daria
+         * la vuelta en la resta sin signo y el watchdog saltaria. */
+        const uint32_t marcaCmdVel  = msCmdVel;
+        const uint32_t marcaCrawler = msCrawler;
         const uint32_t ahora = hw_millis();
 
         /* 0. Respuestas de los RMD a las tramas anteriores */
@@ -283,9 +305,12 @@ static void TaskControl(void *arg) {
         }
         portEXIT_CRITICAL(&mux);
 
-        /* 3. Watchdog de consigna: sin ordenes frescas, estado seguro */
+        /* 3. Watchdog por topico: sin /crawler/command, estado seguro; sin
+         * /cmd_vel, traccion a 0 por la rampa y con par */
         const bool vencido = cc_watchdogExpirado(
-            ahora, (uint32_t)tickComando, WATCHDOG_TIMEOUT_MS);
+            ahora, marcaCrawler, WATCHDOG_TIMEOUT_MS);
+        const bool sinCmdVel = cc_watchdogExpirado(
+            ahora, marcaCmdVel, WATCHDOG_TIMEOUT_MS);
 
         if (emer || vencido) {
             liberarTraccion();
@@ -320,9 +345,11 @@ static void TaskControl(void *arg) {
             }
 
             /* 5. Traccion, con rampa igual que en la version Arduino */
-            velIzqActual = cc_rateLimiter(velIzqActual, objIzq,
+            velIzqActual = cc_rateLimiter(velIzqActual,
+                                          sinCmdVel ? 0.0f : objIzq,
                                           RATE_LIMIT_DPS_CICLO);
-            velDerActual = cc_rateLimiter(velDerActual, objDer,
+            velDerActual = cc_rateLimiter(velDerActual,
+                                          sinCmdVel ? 0.0f : objDer,
                                           RATE_LIMIT_DPS_CICLO);
 
             if (ciclo % ENVIO_CAN_CADA_N_CICLOS == 0) {
@@ -569,7 +596,8 @@ void appMain(void *argument) {
             &msg_crawler, &cb_crawler, ON_NEW_DATA));
 
     tickExecutor = (int64_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
-    tickComando  = tickExecutor;
+    msCmdVel  = hw_millis();
+    msCrawler = msCmdVel;
 
     xTaskCreatePinnedToCore(TaskWatchdog, "wdt",       2048, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(TaskMicroROS, "micro_ros", 8192, NULL, 3, NULL, 0);

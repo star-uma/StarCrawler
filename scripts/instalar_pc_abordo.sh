@@ -321,7 +321,11 @@ echo "  primero SIN el robot, con el robot simulado:"
 echo
 echo "      ros2 launch starcrawler_bringup robot.launch.py sim:=true gui:=true rviz:=true"
 echo
-echo "  Deberias ver el robot en RViz. Para moverlo sin mando:"
+echo "  Deberias ver el robot en RViz. Para moverlo sin mando, estos dos"
+echo "  a la vez, cada uno en su terminal (sin /crawler/command el robot"
+echo "  se queda en estado seguro):"
+echo
+echo "      ros2 topic pub -r 20 /crawler/command starcrawler_msgs/msg/CrawlerCommand '{}'"
 echo
 echo "      ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \\"
 echo "        '{linear: {x: 0.01}, angular: {z: 0.0}}'"

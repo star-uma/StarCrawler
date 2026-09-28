@@ -15,6 +15,7 @@ del nodo.
 """
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Sequence, Tuple
 
 # La traduccion de angulos vive en starcrawler_common: estaba
@@ -165,9 +166,10 @@ class RobotSimulado:
 
         self.vel_izq_dps = 0.0
         self.vel_der_dps = 0.0
-        # Como enSeguridad en app.c: watchdog vencido o emergencia
+        # Como enSeguridad en app.c: /crawler/command caducado o emergencia.
+        # /cmd_vel caducado solo lleva la traccion a 0, con par.
         self.seguridad = True
-        self._vencido = True
+        self._orugas_caducado = True
 
         self._obj_izq_dps = 0.0
         self._obj_der_dps = 0.0
@@ -180,27 +182,38 @@ class RobotSimulado:
         self._en_marcha = [False] * N_ORUGAS
 
         self._t = 0.0
-        self._t_ultimo_cmd = -1e9
+        # Marca de cada topico, como msCmdVel y msCrawler en app.c
+        self._t_traccion = -1e9
+        self._t_orugas = -1e9
         self._resto_s = 0.0
 
     # --- Entradas (lo que llegaria por los topicos) ----------------------
 
-    def consigna_traccion(self, vel_izq_dps: float, vel_der_dps: float) -> None:
+    # Un valor no finito descarta la consigna sin refrescar la marca, como
+    # los callbacks de app.c. Devuelven si se ha aceptado.
+
+    def consigna_traccion(self, vel_izq_dps: float, vel_der_dps: float) -> bool:
+        if not (math.isfinite(vel_izq_dps) and math.isfinite(vel_der_dps)):
+            return False
         # cb_cmd_vel satura cada lado antes de la rampa
         self._obj_izq_dps = saturar(vel_izq_dps, self.vel_max_dps)
         self._obj_der_dps = saturar(vel_der_dps, self.vel_max_dps)
-        self._t_ultimo_cmd = self._t
+        self._t_traccion = self._t
+        return True
 
     def consigna_orugas(self,
                         incrementos: Sequence[int],
                         objetivos_deg: Sequence[float],
                         usar_posicion: bool,
-                        emergencia: bool) -> None:
+                        emergencia: bool) -> bool:
+        if not all(math.isfinite(o) for o in objetivos_deg):
+            return False
         self._incremento = list(incrementos)
         self._objetivo_deg = list(objetivos_deg)
         self._usar_posicion = usar_posicion
         self._emergencia = emergencia
-        self._t_ultimo_cmd = self._t
+        self._t_orugas = self._t
+        return True
 
     # --- Integracion -----------------------------------------------------
 
@@ -220,8 +233,9 @@ class RobotSimulado:
             self._medido = [leer_as5600(self.angulo[i], OFFSETS_ENCODER[i])
                             for i in range(N_ORUGAS)]
 
-        self._vencido = (self._t - self._t_ultimo_cmd) > self.watchdog_s
-        self.seguridad = self._vencido or self._emergencia
+        self._orugas_caducado = (self._t - self._t_orugas) > self.watchdog_s
+        sin_traccion = (self._t - self._t_traccion) > self.watchdog_s
+        self.seguridad = self._orugas_caducado or self._emergencia
         if self.seguridad:
             self.vel_izq_dps = 0.0
             self.vel_der_dps = 0.0
@@ -243,9 +257,11 @@ class RobotSimulado:
             self._en_marcha[i] = cmd != 0
             self._steppers[i].comando(cmd)
 
-        self.vel_izq_dps = rate_limit(self.vel_izq_dps, self._obj_izq_dps,
+        self.vel_izq_dps = rate_limit(self.vel_izq_dps,
+                                      0.0 if sin_traccion else self._obj_izq_dps,
                                       RATE_LIMIT_DPS_CICLO)
-        self.vel_der_dps = rate_limit(self.vel_der_dps, self._obj_der_dps,
+        self.vel_der_dps = rate_limit(self.vel_der_dps,
+                                      0.0 if sin_traccion else self._obj_der_dps,
                                       RATE_LIMIT_DPS_CICLO)
 
         # Lo que la ISR alcanza a dar hasta el siguiente ciclo
@@ -267,7 +283,7 @@ class RobotSimulado:
             errores |= ERR_ENCODER
         if not self.can_ok:
             errores |= ERR_CAN
-        if self._vencido:
+        if self._orugas_caducado:
             errores |= ERR_WATCHDOG
         return errores
 

@@ -19,19 +19,32 @@ DT = 0.02
 
 
 def robot_activo(**kwargs):
-    """Robot con una consigna fresca, para que no salte el watchdog."""
+    """Robot con consignas frescas en los dos topicos."""
     r = RobotSimulado(**kwargs)
     r.consigna_traccion(0.0, 0.0)
     r.consigna_orugas([0] * N_ORUGAS, [180.0] * N_ORUGAS, False, False)
     return r
 
 
-def mover(r, segundos, incrementos=None, objetivos=None, posicion=False):
-    """Manda la misma consigna a 50 Hz, como el teleop."""
+def mover(r, segundos, incrementos=None, objetivos=None, posicion=False,
+          traccion=(0.0, 0.0)):
+    """Manda la misma consigna por los dos topicos a 50 Hz, como el teleop."""
     for _ in range(round(segundos / DT)):
-        r.consigna_traccion(0.0, 0.0)
+        r.consigna_traccion(*traccion)
         r.consigna_orugas(incrementos or [0] * N_ORUGAS,
                           objetivos or [180.0] * N_ORUGAS, posicion, False)
+        r.avanzar(DT)
+
+
+def solo_traccion(r, segundos, izq=0.0, der=0.0):
+    for _ in range(round(segundos / DT)):
+        r.consigna_traccion(izq, der)
+        r.avanzar(DT)
+
+
+def solo_orugas(r, segundos):
+    for _ in range(round(segundos / DT)):
+        r.consigna_orugas([0] * N_ORUGAS, [180.0] * N_ORUGAS, False, False)
         r.avanzar(DT)
 
 
@@ -75,16 +88,84 @@ def test_el_watchdog_salta_a_los_300_ms_como_el_firmware():
 
 def test_con_consignas_frescas_no_salta():
     r = robot_activo()
-    for _ in range(100):
-        r.consigna_traccion(10.0, 10.0)
-        r.avanzar(DT)
+    mover(r, 2.0, traccion=(10.0, 10.0))
     assert r.seguridad is False
+    assert not r.bits_error & ERR_WATCHDOG
 
 
 def test_el_watchdog_pone_su_bit():
     r = RobotSimulado()
     r.avanzar(DT)
     assert r.bits_error & ERR_WATCHDOG
+
+
+# --- Watchdog por topico ------------------------------------------------------
+
+def test_solo_cmd_vel_es_estado_seguro():
+    """/crawler/command es el latido de la parada: sin el, estado seguro."""
+    r = robot_activo()
+    solo_traccion(r, 1.0, 40.0, 40.0)
+    assert r.seguridad is True
+    assert r.bits_error & ERR_WATCHDOG
+    assert r.vel_izq_dps == 0.0 and r.vel_der_dps == 0.0
+
+
+def test_solo_orugas_es_traccion_0_sin_estado_seguro():
+    r = robot_activo()
+    mover(r, 1.0, traccion=(40.0, -40.0))
+    assert r.vel_izq_dps == 40.0
+    solo_orugas(r, 1.0)
+    assert r.seguridad is False
+    assert not r.bits_error & ERR_WATCHDOG
+    assert r.vel_izq_dps == 0.0 and r.vel_der_dps == 0.0
+
+
+def test_sin_cmd_vel_la_traccion_baja_por_la_rampa():
+    r = robot_activo()
+    mover(r, 1.0, traccion=(40.0, 40.0))
+    solo_orugas(r, 0.26)          # todavia fresco
+    assert r.vel_izq_dps == 40.0
+    solo_orugas(r, 0.06)          # recien caducado: 4 dps por ciclo
+    assert 0.0 < r.vel_izq_dps < 40.0
+    assert r.seguridad is False
+
+
+def test_cmd_vel_vencido_y_despues_solo_orugas_no_reanuda():
+    r = robot_activo()
+    mover(r, 1.0, traccion=(40.0, 40.0))
+    solo_orugas(r, 1.0)
+    assert r.vel_izq_dps == 0.0
+    solo_orugas(r, 2.0)
+    assert r.vel_izq_dps == 0.0 and r.vel_der_dps == 0.0
+
+
+def test_cmd_vel_nuevo_reanuda_la_traccion():
+    r = robot_activo()
+    mover(r, 1.0, traccion=(40.0, 40.0))
+    solo_orugas(r, 1.0)
+    mover(r, 1.0, traccion=(40.0, 40.0))
+    assert r.vel_izq_dps == 40.0
+
+
+def test_un_valor_no_finito_no_refresca_la_marca():
+    r = robot_activo()
+    for _ in range(50):           # 1 s
+        assert r.consigna_traccion(math.nan, 0.0) is False
+        assert r.consigna_orugas([0] * N_ORUGAS, [math.inf] + [180.0] * 3,
+                                 False, False) is False
+        r.avanzar(DT)
+    assert r.seguridad is True
+    assert r.vel_izq_dps == 0.0
+
+
+def test_un_valor_no_finito_no_cambia_la_consigna():
+    r = robot_activo()
+    mover(r, 1.0, traccion=(40.0, 40.0))
+    r.consigna_traccion(-math.inf, math.nan)
+    r.consigna_orugas([0] * N_ORUGAS, [math.nan] * N_ORUGAS, True, False)
+    r.avanzar(DT)
+    assert r.vel_izq_dps == 40.0 and r.vel_der_dps == 40.0
+    assert r.angulo == [180.0] * N_ORUGAS
 
 
 # --- Traccion --------------------------------------------------------------
@@ -99,27 +180,21 @@ def test_la_traccion_no_salta_de_golpe():
 
 def test_la_traccion_acaba_llegando():
     r = robot_activo()
-    for _ in range(100):
-        r.consigna_traccion(40.0, -40.0)
-        r.avanzar(DT)
+    mover(r, 2.0, traccion=(40.0, -40.0))
     assert math.isclose(r.vel_izq_dps, 40.0, rel_tol=1e-6)
     assert math.isclose(r.vel_der_dps, -40.0, rel_tol=1e-6)
 
 
 def test_la_traccion_satura_a_40_dps_como_el_firmware():
     r = robot_activo()
-    for _ in range(100):
-        r.consigna_traccion(100.0, -250.0)
-        r.avanzar(DT)
+    mover(r, 2.0, traccion=(100.0, -250.0))
     assert r.vel_izq_dps == 40.0
     assert r.vel_der_dps == -40.0
 
 
 def test_la_emergencia_para_la_traccion():
     r = robot_activo()
-    for _ in range(50):
-        r.consigna_traccion(40.0, 40.0)
-        r.avanzar(DT)
+    mover(r, 1.0, traccion=(40.0, 40.0))
     assert r.vel_izq_dps > 0
     r.consigna_orugas([0] * N_ORUGAS, [180.0] * N_ORUGAS, False, True)
     r.avanzar(DT)

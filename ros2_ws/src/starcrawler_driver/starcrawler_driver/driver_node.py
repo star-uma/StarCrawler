@@ -18,7 +18,8 @@ Publica:
 Seguridad en capas:
   1. El ESP32 tiene su propio watchdog (300 ms) y para solo. Es la capa que
      manda: nunca se delega la seguridad a la red ni a ROS.
-  2. Este nodo manda ceros si /cmd_vel o /crawler/command se quedan viejos.
+  2. Sin /crawler/command fresco, este nodo manda emergencia y traccion 0: es
+     el latido de la parada. Sin /cmd_vel fresco, solo traccion 0.
   3. emergency_stop en CrawlerCommand llega al firmware como flag dedicado.
 """
 from __future__ import annotations
@@ -140,11 +141,20 @@ class StarCrawlerDriver(Node):
 
     # ─── Callbacks ───────────────────────────────────────────────────────
 
+    # Un campo no finito descarta el mensaje sin refrescar la marca, como en
+    # la app de micro-ROS: un NaN saldria como 40 dps por max/min.
+
     def cb_cmd_vel(self, msg: Twist) -> None:
+        campos = (msg.linear.x, msg.linear.y, msg.linear.z,
+                  msg.angular.x, msg.angular.y, msg.angular.z)
+        if not all(math.isfinite(c) for c in campos):
+            return
         self.cmd_vel = msg
         self.t_cmd_vel = self.ahora()
 
     def cb_crawler(self, msg: CrawlerCommand) -> None:
+        if not all(math.isfinite(float(v)) for v in msg.target):
+            return
         self.crawler_cmd = msg
         self.t_crawler_cmd = self.ahora()
 
@@ -170,6 +180,13 @@ class StarCrawlerDriver(Node):
         cmd = proto.Comando(seq=self.seq & 0xFF)
         self.seq += 1
 
+        c = self.crawler_cmd
+        if c is None or t - self.t_crawler_cmd > self.cmd_timeout:
+            # Sin el latido de la parada: emergencia y traccion 0
+            cmd.emergencia = True
+            self.escribir(cmd)
+            return
+
         # Traccion: cinematica diferencial inversa
         if t - self.t_cmd_vel <= self.cmd_timeout:
             v = self.cmd_vel.linear.x
@@ -187,20 +204,21 @@ class StarCrawlerDriver(Node):
             cmd.vel_der_cdps = int(round(dps_der * 100))
 
         # Orugas
-        c = self.crawler_cmd
-        if c is not None and t - self.t_crawler_cmd <= self.cmd_timeout:
-            cmd.emergencia = bool(c.emergency_stop)
-            cmd.usar_posicion = bool(c.use_position)
-            if c.use_position:
-                cmd.objetivo_cdeg = [
-                    int(round(proto.elevacion_a_enc(float(c.target[i]), i) * 100))
-                    for i in range(proto.N_ORUGAS)]
-                cmd.incremento = [0] * proto.N_ORUGAS
-            else:
-                cmd.incremento = [
-                    proto.incremento_a_bruto(int(c.increment[i]), i)
-                    for i in range(proto.N_ORUGAS)]
+        cmd.emergencia = bool(c.emergency_stop)
+        cmd.usar_posicion = bool(c.use_position)
+        if c.use_position:
+            cmd.objetivo_cdeg = [
+                int(round(proto.elevacion_a_enc(float(c.target[i]), i) * 100))
+                for i in range(proto.N_ORUGAS)]
+            cmd.incremento = [0] * proto.N_ORUGAS
+        else:
+            cmd.incremento = [
+                proto.incremento_a_bruto(int(c.increment[i]), i)
+                for i in range(proto.N_ORUGAS)]
 
+        self.escribir(cmd)
+
+    def escribir(self, cmd: proto.Comando) -> None:
         try:
             self.puerto.write(proto.empaquetar_comando(cmd))
         except Exception as e:  # noqa: BLE001
