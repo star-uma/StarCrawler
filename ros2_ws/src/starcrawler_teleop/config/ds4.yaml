@@ -47,11 +47,11 @@ starcrawler_teleop:
     # Ajustes de conduccion
     zona_muerta: 0.08
     umbral_eje: 0.5
-    # Topes de /cmd_vel. Coherentes con wheel_radius=0.025 y 40 dps del
-    # firmware; el driver satura de todos modos, asi que quedarse corto aqui
-    # es seguro.
-    max_lineal: 0.017          # m/s
-    max_angular: 0.087         # rad/s
+    # Topes de /cmd_vel: los 40 dps del firmware (VEL_MAX_DPS) con la
+    # geometria de la odometria (r=0.0764 m, L=0.524 m). Avanzar y girar a
+    # fondo a la vez pide mas de 40 dps a un lado y el firmware lo satura.
+    max_lineal: 0.053          # m/s
+    max_angular: 0.20          # rad/s
     factor_lento: 0.5
     s_preset: 0.5              # mantener el boton para aplicar la pose
 

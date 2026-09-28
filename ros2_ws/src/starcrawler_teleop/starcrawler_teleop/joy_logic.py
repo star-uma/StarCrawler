@@ -84,8 +84,8 @@ class Mapeo:
 class Ajustes:
     zona_muerta: float = 0.08
     umbral_eje: float = 0.5          # para tratar gatillos/cruceta como digital
-    max_lineal: float = 0.017        # m/s  (40 dps * r=0.025 m)
-    max_angular: float = 0.087       # rad/s
+    max_lineal: float = 0.053        # m/s  (40 dps con r=0.0764 m)
+    max_angular: float = 0.20        # rad/s (40 dps por lado, L=0.524 m)
     factor_lento: float = 0.5
     s_preset: float = 0.5            # mantener el boton para activar la pose
 
