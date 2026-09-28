@@ -27,6 +27,15 @@
 #define twai_start                    can_start
 #define twai_transmit                 can_transmit
 #define twai_receive                  can_receive
+/* Recuperacion tras un bus-off */
+#define twai_status_info_t            can_status_info_t
+#define twai_get_status_info          can_get_status_info
+#define twai_clear_transmit_queue     can_clear_transmit_queue
+#define twai_clear_receive_queue      can_clear_receive_queue
+#define twai_initiate_recovery        can_initiate_recovery
+#define TWAI_STATE_STOPPED            CAN_STATE_STOPPED
+#define TWAI_STATE_RUNNING            CAN_STATE_RUNNING
+#define TWAI_STATE_BUS_OFF            CAN_STATE_BUS_OFF
 
 #include "esp32/rom/ets_sys.h"
 #define esp_rom_delay_us              ets_delay_us

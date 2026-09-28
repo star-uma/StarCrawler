@@ -156,6 +156,24 @@ todos los `/joint_states`: no habia TF de las orugas y RViz pintaba el modelo
 en rojo (la web 3D no lo nota porque no usa TF). Medido (24-09): sello a
 [-78, +8] ms de la hora del PC, recolocado en <1 s tras un salto del reloj.
 
+**Bus-off**: igual que en `StarCrawlerHW` (`a09f202`). Si el bus cae (un
+cortocircuito, la terminación de la #21), el TWAI entra en bus-off y deja de
+transmitir hasta que alguien lo recupere. Antes no lo hacía nadie, y como el
+ping con el agente seguía bien, el ESP32 no se reiniciaba: nodo vivo y tracción
+muerta. Ahora `canbus_atender()` recupera y rearranca en cada ciclo, y
+`canbus_enviar()` no encola con el bus parado (el driver casca si quedan tramas
+al recuperarse). `can_ok` refleja el último envío: antes, un solo fallo lo
+dejaba en `false` para siempre.
+
+**I2C**: timeout de 5 ms, pero en ticks de FreeRTOS y nunca menos de 2. A
+100 Hz, `pdMS_TO_TICKS(5)` es 0 y un tick puede vencer al instante; así que a
+100 Hz queda en 2 ticks (10–20 ms) y solo baja a 5 ms si el firmware va a
+1000 Hz (`CONFIG_FREERTOS_HZ` del sdkconfig). Un sensor desconectado no llega
+a agotarlo: da NACK enseguida. El timeout acota el caso de bus colgado.
+
+Estos dos cambios compilan en seco contra cabeceras de IDF simuladas (4.1 y
+4.4); **falta el `build_firmware.sh` real y probarlos con el bus**.
+
 CAN, steppers y encoders siguen **sin verificar**: eso solo se ve con el robot
 sobre tacos.
 

@@ -205,10 +205,10 @@ static void cb_crawler(const void *msgin) {
 
 /* --- Traccion --------------------------------------------------------- */
 
-static void enviarVelocidadRMD(uint32_t id, float dps) {
+static bool enviarVelocidadRMD(uint32_t id, float dps) {
     uint8_t trama[8];
     cc_tramaVelocidadRMD(dps, trama);
-    if (!canbus_enviar(id, trama)) canOk = false;
+    return canbus_enviar(id, trama);
 }
 
 static void liberarTraccion(void) {
@@ -235,6 +235,7 @@ static void TaskControl(void *arg) {
 
     for (;;) {
         ciclo++;
+        canbus_atender();
 
         /* 1. Leer los cuatro encoders */
         float ang[CC_NUM_ORUGAS];
@@ -299,6 +300,8 @@ static void TaskControl(void *arg) {
                                           RATE_LIMIT_DPS_CICLO);
 
             if (ciclo % ENVIO_CAN_CADA_N_CICLOS == 0) {
+                /* Refleja el ultimo envio: tras recuperar el bus, vuelve */
+                bool envioOk = true;
                 for (int i = 0; i < CC_NUM_ORUGAS; i++) {
                     /* Lado izquierdo invertido, como en el firmware original */
                     const bool izquierda = (i == 1 || i == 3);  /* FL, RL */
@@ -313,9 +316,10 @@ static void TaskControl(void *arg) {
                         v += comp * SIGNO_COMPENSACION[i];
                     }
 #endif
-                    enviarVelocidadRMD(CAN_ID[i], v);
+                    if (!enviarVelocidadRMD(CAN_ID[i], v)) envioOk = false;
                     esp_rom_delay_us(CAN_INTER_FRAME_US);
                 }
+                canOk = envioOk;
             }
         }
 

@@ -18,6 +18,9 @@ bool canbus_init(void);
 bool canbus_enviar(uint32_t id, const uint8_t datos[8]);
 bool canbus_recibir(uint32_t *id, uint8_t datos[8]);
 
+/* Recuperacion tras un bus-off. Llamar en cada ciclo de control. */
+void canbus_atender(void);
+
 /* --- Steppers de elevacion (DM542) ---------------------------------- */
 
 void steppers_init(void);

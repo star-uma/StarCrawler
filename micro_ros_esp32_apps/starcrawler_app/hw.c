@@ -46,7 +46,13 @@ bool canbus_init(void) {
     return twai_start() == ESP_OK;
 }
 
+/* Con el bus caido no se encola nada: el driver de IDF casca (assert en
+ * twai.c) si quedan tramas pendientes al recuperarse. Como en a09f202. */
 bool canbus_enviar(uint32_t id, const uint8_t datos[8]) {
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK || st.state != TWAI_STATE_RUNNING) {
+        return false;
+    }
     twai_message_t msg;
     memset(&msg, 0, sizeof(msg));
     msg.identifier = id;
@@ -61,6 +67,20 @@ bool canbus_recibir(uint32_t *id, uint8_t datos[8]) {
     *id = msg.identifier;
     for (int i = 0; i < 8; i++) datos[i] = msg.data[i];
     return true;
+}
+
+/* Bus-off: vaciar colas, recuperar y volver a arrancar cuando el
+ * controlador quede parado. */
+void canbus_atender(void) {
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK) return;
+    if (st.state == TWAI_STATE_BUS_OFF) {
+        twai_clear_transmit_queue();
+        twai_clear_receive_queue();
+        twai_initiate_recovery();
+    } else if (st.state == TWAI_STATE_STOPPED) {
+        twai_start();
+    }
 }
 
 /* ==================================================================== */
@@ -206,7 +226,11 @@ bool steppers_algunoActivo(void) {
 /* ==================================================================== */
 
 #define I2C_PUERTO      I2C_NUM_0
-#define I2C_TIMEOUT_MS  20
+/* Cota si el bus I2C se cuelga. En ticks y nunca menos de 2: a 100 Hz,
+ * pdMS_TO_TICKS(5) es 0 y 1 tick puede vencer al instante. */
+#define I2C_TIMEOUT_MS     5
+#define I2C_TIMEOUT_TICKS  (pdMS_TO_TICKS(I2C_TIMEOUT_MS) >= 2 \
+                            ? pdMS_TO_TICKS(I2C_TIMEOUT_MS) : 2)
 
 static const float offsetsEncoder[CC_NUM_ORUGAS] = OFFSETS_ENCODER;
 
@@ -230,7 +254,7 @@ static bool tcaSeleccionar(uint8_t canal) {
     const uint8_t mascara = (uint8_t)(1u << canal);
     return i2c_master_write_to_device(
                I2C_PUERTO, DIR_TCA9548A, &mascara, 1,
-               pdMS_TO_TICKS(I2C_TIMEOUT_MS)) == ESP_OK;
+               I2C_TIMEOUT_TICKS) == ESP_OK;
 }
 
 bool encoders_leer(int idx, float *angDeg) {
@@ -244,7 +268,7 @@ bool encoders_leer(int idx, float *angDeg) {
     uint8_t buf[2];
     if (i2c_master_write_read_device(
             I2C_PUERTO, DIR_AS5600, &reg, 1, buf, 2,
-            pdMS_TO_TICKS(I2C_TIMEOUT_MS)) != ESP_OK) {
+            I2C_TIMEOUT_TICKS) != ESP_OK) {
         return false;
     }
 
