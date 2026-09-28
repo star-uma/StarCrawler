@@ -18,7 +18,8 @@ bool imu_ok              # reservado: el firmware ROS 2 no usa IMU
 bool safety_active       # true = el ESP32 esta en estado seguro
 
 # Bits de error tal cual los reporta el firmware (ver control_core.h):
-# 0..3 encoder FR/FL/RR/RL, 4 IMU, 5 CAN, 6 watchdog
+# 0..3 encoder FR/FL/RR/RL, 4 IMU, 5 CAN, 6 watchdog,
+# 7 hardware simulado (no es el robot: HW_SIMULADO o starcrawler_sim)
 uint16 error_bits
 
 # Salud del enlace serie PC <-> ESP32

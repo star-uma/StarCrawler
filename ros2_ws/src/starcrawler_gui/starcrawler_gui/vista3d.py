@@ -344,7 +344,8 @@ function fmt(v, dec, unidad) {
 function panel(s) {
   $('enlace').className = 'punto' + (s.enlace ? ' on' : '');
   $('info').textContent = `fuente: ${s.fuente} · ${s.pps} paq/s` +
-    (s.enlace ? '' : ' · SIN ENLACE');
+    (s.enlace ? '' : ' · SIN ENLACE') +
+    ((s.err >> 7) & 1 ? ' · HARDWARE SIMULADO' : '');
   $('sinEnlace').hidden = !!s.enlace;
 
   const p = s.pose;

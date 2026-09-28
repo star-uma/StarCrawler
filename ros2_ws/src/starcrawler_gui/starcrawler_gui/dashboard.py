@@ -310,7 +310,8 @@ function pintar(s, t) {
   // Cabecera
   document.getElementById('enlace').className = 'punto' + (s.enlace ? ' on' : '');
   document.getElementById('info').textContent =
-    `fuente: ${s.fuente} · ${s.pps} paq/s` + (s.enlace ? '' : ' · SIN ENLACE');
+    `fuente: ${s.fuente} · ${s.pps} paq/s` + (s.enlace ? '' : ' · SIN ENLACE') +
+    ((s.err >> 7) & 1 ? ' · HARDWARE SIMULADO' : '');
 
   // Modo
   document.getElementById('modo').textContent = s.enlace ? s.modo : '–';
