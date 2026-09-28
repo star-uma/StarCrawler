@@ -88,6 +88,21 @@ void cc_tramaLiberarRMD(uint8_t out[8]) {
   out[0] = 0x80;
 }
 
+int cc_leerRespuestaRMD(uint32_t id, const uint8_t datos[8],
+                        const uint32_t ids[CC_NUM_ORUGAS], cc_RespuestaRMD *out) {
+  if (datos == NULL || ids == NULL || out == NULL) return -1;
+  for (int i = 0; i < CC_NUM_ORUGAS; i++) {
+    if (id != ids[i] + 0x100 && id != ids[i]) continue;
+    out->comando       = datos[0];
+    out->temperatura_C = (int8_t)datos[1];
+    out->corriente_cA  = leerInt16LE(datos + 2);
+    out->velocidad_dps = leerInt16LE(datos + 4);
+    out->posicion_deg  = leerInt16LE(datos + 6);
+    return i;
+  }
+  return -1;
+}
+
 /* ── Elevación ──────────────────────────────────────────────────────────── */
 
 float cc_as5600ADeg(uint16_t raw, float offsetDeg) {

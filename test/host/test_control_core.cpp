@@ -103,6 +103,29 @@ static void testTramasRMD() {
   CHECK(restoCero, "resto de la trama a cero");
 }
 
+static void testRespuestaRMD() {
+  printf("respuesta RMD:\n");
+  const uint32_t ids[CC_NUM_ORUGAS] = {0x142, 0x141, 0x143, 0x144};
+  /* 0xA2 de 0x141: 31 C, -1,25 A, -40 dps, 350 grados */
+  const uint8_t d[8] = {0xA2, 31, 0x83, 0xFF, 0xD8, 0xFF, 0x5E, 0x01};
+  cc_RespuestaRMD r;
+
+  CHECK(cc_leerRespuestaRMD(0x241, d, ids, &r) == 1, "0x241 es FL (indice 1)");
+  CHECK(r.comando == 0xA2, "comando");
+  CHECK(r.temperatura_C == 31, "temperatura");
+  CHECK(r.corriente_cA == -125, "corriente int16 LE con signo");
+  CHECK(r.velocidad_dps == -40, "velocidad int16 LE con signo");
+  CHECK(r.posicion_deg == 350, "posicion");
+  CHECK(cc_leerRespuestaRMD(0x144, d, ids, &r) == 3, "tambien con el id sin +0x100");
+  CHECK(cc_leerRespuestaRMD(0x245, d, ids, &r) == -1, "0x245 no es de nadie");
+  CHECK(cc_leerRespuestaRMD(0x100, d, ids, &r) == -1, "0x100 no es de nadie");
+
+  const uint8_t apagar[8] = {0x80, 0, 0, 0, 0, 0, 0, 0};
+  CHECK(cc_leerRespuestaRMD(0x242, apagar, ids, &r) == 0 && r.comando == 0x80,
+        "la de 0x80 tambien cuenta como respuesta");
+  CHECK(cc_leerRespuestaRMD(0x242, NULL, ids, &r) == -1, "sin datos");
+}
+
 /* ── Saturación y rate limiter ──────────────────────────────────────────── */
 
 static void testSaturarYRate() {
@@ -261,6 +284,7 @@ int main() {
   testParseDatagrama();
   testTelemetria();
   testTramasRMD();
+  testRespuestaRMD();
   testSaturarYRate();
   testAS5600();
   testControlPosicion();

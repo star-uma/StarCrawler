@@ -40,6 +40,9 @@ typedef struct {
 #define CC_ERR_IMU        (1u << 4)
 #define CC_ERR_CAN        (1u << 5)
 #define CC_ERR_WATCHDOG   (1u << 6)
+/* Bit 7: hardware simulado (HW_SIMULADO de la app de micro-ROS) */
+/* RMD que no responde, orden {FR, FL, RR, RL}: bits 8 a 11 */
+#define CC_ERR_RMD(i)     (1u << (8 + (i)))
 
 /* ── Comunicaciones ─────────────────────────────────────────────────────── */
 
@@ -66,6 +69,22 @@ void cc_tramaVelocidadRMD(float velocidad_dps, uint8_t out[8]);
 
 /* Trama de liberación RMD (0x80): motor queda sin par */
 void cc_tramaLiberarRMD(uint8_t out[8]);
+
+/* Respuesta de un RMD (V3): llega con su id + 0x100 y el mismo comando. La
+ * de 0xA2 trae [1]=temperatura C, [2..3]=corriente 0,01 A, [4..5]=dps y
+ * [6..7]=posicion en grados, int16 LE (formato de test_motor_diag_simple). */
+typedef struct {
+  uint8_t comando;
+  int8_t  temperatura_C;
+  int16_t corriente_cA;
+  int16_t velocidad_dps;
+  int16_t posicion_deg;
+} cc_RespuestaRMD;
+
+/* Indice en ids[] del motor que responde, o -1 si la trama no es de ninguno.
+ * Los campos de medida solo valen si comando == 0xA2. */
+int cc_leerRespuestaRMD(uint32_t id, const uint8_t datos[8],
+                        const uint32_t ids[CC_NUM_ORUGAS], cc_RespuestaRMD *out);
 
 /* ── Elevación (encoders + steppers) ────────────────────────────────────── */
 
