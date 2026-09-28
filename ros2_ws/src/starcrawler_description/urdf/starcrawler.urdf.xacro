@@ -10,9 +10,16 @@
     a los grados de encoder del firmware (180 deg = horizontal; las orugas
     FL y RR van espejadas, 360-a, como documenta el TFG).
 
+  Cada oruga es la banda alrededor de dos poleas: la activa en el pivote (la
+  que mueve el RMD, su radio es el wheel_radius de la odometria) y la pasiva
+  en la punta. El chasis cuelga de tres juntas virtuales (altura, cabeceo y
+  balanceo) que publica chasis_node: al bajar una oruga el chasis se levanta
+  sobre ella en vez de atravesar el suelo. Con todo a cero, orugas en llano.
+
   DIMENSIONES: valores iniciales APROXIMADOS. Medir en el robot y ajustar aqui
-  (todo son propiedades xacro, se cambia en un sitio).
-  Referencia: cajas envolventes de los STEP de ControlHORUFinalBoss/CAD (mm):
+  (todo son propiedades xacro, se cambia en un sitio; chasis_node las lee del
+  propio URDF). Referencia: cajas envolventes de los STEP de
+  ControlHORUFinalBoss/CAD (mm):
       Chasis.STEP ................. 1300 x 80 x 400
       Correa v2 (oruga) ........... 622 x 327 x 80
       Panel exterior v3 ........... 365 x 425 x 10
@@ -32,13 +39,26 @@
   <xacro:property name="base_height"  value="0.10"/>   <!-- Z             -->
   <xacro:property name="base_mass"    value="20.0"/>   <!-- kg, aprox      -->
 
-  <xacro:property name="arm_length"   value="0.36"/>   <!-- pivote a punta -->
+  <!-- Poleas de la oruga: activa del CAD (0.15279/2, = wheel_radius) y
+       pasiva de diametro 83 -->
+  <xacro:property name="pulley_radius" value="0.0764"/>
+  <xacro:property name="tip_radius"    value="0.0415"/>
+  <xacro:property name="arm_length"   value="0.36"/>   <!-- entre ejes de poleas -->
   <xacro:property name="arm_width"    value="0.08"/>
-  <xacro:property name="arm_height"   value="0.09"/>
   <xacro:property name="arm_mass"     value="3.0"/>
+  <xacro:property name="belt_thickness" value="0.012"/>
 
-  <!-- Altura del pivote sobre el suelo (con las orugas horizontales) -->
-  <xacro:property name="pivot_height" value="0.09"/>
+  <!-- Tramos de banda: tangentes a las dos poleas, inclinados belt_angle -->
+  <xacro:property name="belt_angle"  value="${asin((pulley_radius - tip_radius) / arm_length)}"/>
+  <xacro:property name="belt_length" value="${arm_length * cos(belt_angle)}"/>
+  <xacro:property name="belt_x"
+      value="${arm_length/2 + (pulley_radius + tip_radius - belt_thickness)/2 * sin(belt_angle)}"/>
+  <xacro:property name="belt_z"
+      value="${(pulley_radius + tip_radius - belt_thickness)/2 * cos(belt_angle)}"/>
+
+  <!-- Altura del pivote sobre el suelo con las orugas en llano: la banda
+       apoya bajo la polea activa -->
+  <xacro:property name="pivot_height" value="${pulley_radius}"/>
 
   <!-- Limite de recorrido: encoder 90..270 deg -> +-90 deg de elevacion -->
   <xacro:property name="arm_limit"    value="${pi/2}"/>
@@ -70,10 +90,30 @@
   <!-- base_footprint: proyeccion en el suelo, raiz para Nav2 -->
   <link name="base_footprint"/>
 
-  <joint name="base_joint" type="fixed">
+  <!-- Juntas virtuales del apoyo: las publica chasis_node. La altura se
+       mide desde la de las orugas en llano, para que cero sea reposo. -->
+  <joint name="chassis_lift_joint" type="prismatic">
     <parent link="base_footprint"/>
-    <child link="base_link"/>
+    <child link="chassis_lift_link"/>
     <origin xyz="0 0 ${pivot_height}"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="${arm_length + tip_radius}" effort="0" velocity="1"/>
+  </joint>
+  <link name="chassis_lift_link"/>
+
+  <joint name="chassis_pitch_joint" type="revolute">
+    <parent link="chassis_lift_link"/>
+    <child link="chassis_pitch_link"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="${-pi/2}" upper="${pi/2}" effort="0" velocity="1"/>
+  </joint>
+  <link name="chassis_pitch_link"/>
+
+  <joint name="chassis_roll_joint" type="revolute">
+    <parent link="chassis_pitch_link"/>
+    <child link="base_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="${-pi/2}" upper="${pi/2}" effort="0" velocity="1"/>
   </joint>
 
   <link name="base_link">
@@ -92,6 +132,8 @@
        y_sign: +1 izquierda,  -1 derecha  (ROS: Y positivo a la izquierda)
        El eje de giro se elige para que POSITIVO = brazo levantado en las
        cuatro orugas: delanteras giran sobre -Y, traseras sobre +Y.
+       El pivote es el eje de la polea activa; chasis_node reconoce las
+       poleas como los dos cilindros del link.
   -->
   <xacro:macro name="crawler" params="name x_sign y_sign material">
     <joint name="${name}_joint" type="revolute">
@@ -106,21 +148,36 @@
 
     <link name="${name}_link">
       <visual>
-        <!-- el brazo sale del pivote hacia fuera del chasis -->
-        <origin xyz="${x_sign*arm_length/2} 0 0"/>
-        <geometry><box size="${arm_length} ${arm_width} ${arm_height}"/></geometry>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${pulley_radius}" length="${arm_width}"/></geometry>
+        <material name="${material}"/>
+      </visual>
+      <visual>
+        <origin xyz="${x_sign*arm_length} 0 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${tip_radius}" length="${arm_width}"/></geometry>
+        <material name="${material}"/>
+      </visual>
+      <!-- tramo de arriba y tramo de abajo de la banda -->
+      <visual>
+        <origin xyz="${x_sign*belt_x} 0 ${belt_z}" rpy="0 ${x_sign*belt_angle} 0"/>
+        <geometry><box size="${belt_length} ${arm_width} ${belt_thickness}"/></geometry>
+        <material name="${material}"/>
+      </visual>
+      <visual>
+        <origin xyz="${x_sign*belt_x} 0 ${-belt_z}" rpy="0 ${-x_sign*belt_angle} 0"/>
+        <geometry><box size="${belt_length} ${arm_width} ${belt_thickness}"/></geometry>
         <material name="${material}"/>
       </visual>
       <collision>
         <origin xyz="${x_sign*arm_length/2} 0 0"/>
-        <geometry><box size="${arm_length} ${arm_width} ${arm_height}"/></geometry>
+        <geometry><box size="${arm_length} ${arm_width} ${2*pulley_radius}"/></geometry>
       </collision>
       <inertial>
         <origin xyz="${x_sign*arm_length/2} 0 0"/>
         <mass value="${arm_mass}"/>
         <inertia
-          ixx="${arm_mass*(arm_width*arm_width+arm_height*arm_height)/12.0}" ixy="0.0" ixz="0.0"
-          iyy="${arm_mass*(arm_length*arm_length+arm_height*arm_height)/12.0}" iyz="0.0"
+          ixx="${arm_mass*(arm_width*arm_width+4*pulley_radius*pulley_radius)/12.0}" ixy="0.0" ixz="0.0"
+          iyy="${arm_mass*(arm_length*arm_length+4*pulley_radius*pulley_radius)/12.0}" iyz="0.0"
           izz="${arm_mass*(arm_length*arm_length+arm_width*arm_width)/12.0}"/>
       </inertial>
     </link>

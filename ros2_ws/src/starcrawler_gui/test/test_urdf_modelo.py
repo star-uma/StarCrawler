@@ -130,3 +130,11 @@ def test_el_urdf_del_robot_tiene_lo_que_dibuja_la_vista():
     # Positivo = brazo levantado: delanteras giran sobre -Y, traseras sobre +Y
     assert juntas['crawler_fr_joint']['eje'] == [0.0, -1.0, 0.0]
     assert juntas['crawler_rl_joint']['eje'] == [0.0, 1.0, 0.0]
+
+    # El chasis cuelga de las juntas virtuales que publica chasis_node, y la
+    # vista 3D tiene que saber moverlas
+    assert juntas['chassis_lift_joint']['tipo'] == 'prismatic'
+    assert juntas['chassis_lift_joint']['eje'] == [0.0, 0.0, 1.0]
+    assert juntas['chassis_pitch_joint']['eje'] == [0.0, 1.0, 0.0]
+    assert juntas['chassis_roll_joint']['eje'] == [1.0, 0.0, 0.0]
+    assert juntas['chassis_roll_joint']['hijo'] == 'base_link'

@@ -16,12 +16,13 @@ setup(
     zip_safe=True,
     maintainer='Mario Garcia Jimenez',
     maintainer_email='mariogj.03@uma.es',
-    description='Odometria de orugas de StarCrawler',
+    description='Odometria de orugas y apoyo del chasis de StarCrawler',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'odometry_node = starcrawler_odometry.odometry_node:main',
+            'chasis_node = starcrawler_odometry.chasis_node:main',
         ],
     },
 )

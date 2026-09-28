@@ -4,6 +4,7 @@ robot.launch.py — arranque completo de StarCrawler
 Levanta todo lo que corre en el PC de a bordo:
 
     robot_state_publisher  (URDF -> TF, dibuja el robot)
+    starcrawler_chasis     (el chasis apoyado en sus orugas)
     starcrawler_driver     (puente serie con el ESP32)
     joy + starcrawler_teleop  (mando conectado al PC)
 
@@ -135,6 +136,15 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('odom')),
             parameters=[PathJoinSubstitution(
                 [odometria_share, 'config', 'odometry.yaml'])],
+            output='screen',
+        ),
+        # El chasis sobre sus orugas: juntas virtuales de altura, cabeceo
+        # y balanceo a partir de las elevaciones. Sin el, base_link no
+        # tiene TF: va siempre.
+        Node(
+            package='starcrawler_odometry',
+            executable='chasis_node',
+            name='starcrawler_chasis',
             output='screen',
         ),
         Node(

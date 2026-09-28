@@ -6,7 +6,8 @@
   <description>
     Odometria de orugas a partir de la velocidad de banda que publica el
     ESP32. Separada del driver para poder probarla y sustituirla sin
-    tocarlo, y para dejar sitio a fusionar una IMU mas adelante.
+    tocarlo, y para dejar sitio a fusionar una IMU mas adelante. Tambien
+    el apoyo del chasis sobre sus orugas en llano (chasis_node).
   </description>
   <maintainer email="mariogj.03@uma.es">Mario Garcia Jimenez</maintainer>
   <license>MIT</license>
@@ -14,6 +15,8 @@
   <depend>rclpy</depend>
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>starcrawler_msgs</depend>
 
