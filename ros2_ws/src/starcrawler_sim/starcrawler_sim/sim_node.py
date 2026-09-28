@@ -38,7 +38,7 @@ from starcrawler_common.angulos import (
     es_espejada,
 )
 
-from .sim_core import RobotSimulado
+from .sim_core import RobotSimulado, VEL_MAX_DPS, WATCHDOG_S
 
 RAD_A_GRADOS = 57.29577951
 
@@ -63,11 +63,17 @@ class NodoSimulador(Node):
         self.declare_parameter('encoders_ok', True)
         self.declare_parameter('can_ok', True)
 
+        # Los del config.h de la app de micro-ROS
+        self.declare_parameter('watchdog_s', WATCHDOG_S)
+        self.declare_parameter('vel_max_dps', VEL_MAX_DPS)
+
         self.radio = self.get_parameter('wheel_radius').value
         self.separacion = self.get_parameter('track_separation').value
         rate = self.get_parameter('rate_hz').value
 
         self.robot = RobotSimulado(
+            watchdog_s=self.get_parameter('watchdog_s').value,
+            vel_max_dps=self.get_parameter('vel_max_dps').value,
             encoders_ok=self.get_parameter('encoders_ok').value,
             can_ok=self.get_parameter('can_ok').value)
 

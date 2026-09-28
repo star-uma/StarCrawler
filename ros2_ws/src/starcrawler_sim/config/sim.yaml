@@ -9,6 +9,11 @@ starcrawler_sim:
     track_separation: 0.524
     rate_hz: 50.0
 
+    # Como el config.h de la app de micro-ROS: WATCHDOG_TIMEOUT_MS y
+    # VEL_MAX_DPS. Con otros valores el simulador deja de parecerse al robot.
+    watchdog_s: 0.3
+    vel_max_dps: 40.0
+
     # Simulacion de averias. Con estos en false se puede comprobar como se
     # comporta el resto del grafo con el robot degradado, sin tener que
     # desconectar nada de verdad.
