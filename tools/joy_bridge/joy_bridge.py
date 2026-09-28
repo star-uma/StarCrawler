@@ -26,6 +26,9 @@ import time
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 # Sin ventana con foco, SDL no actualiza el mando si no se le pide
 os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
+# Por Bluetooth, el driver HIDAPI de SDL da el DS4 por desconectado a los
+# 0,5 s de abrirlo (y se apaga el LED): se usa DirectInput
+os.environ.setdefault("SDL_JOYSTICK_HIDAPI_PS4", "0")
 import pygame  # noqa: E402
 
 # Orden crudo del DualShock 4 en Windows con pygame 2. SDL puede abrirlo de
@@ -153,11 +156,13 @@ def main():
                         and ev.instance_id == mando.get_instance_id()):
                     mando = None
                     print("Mando desconectado; espero a que vuelva.")
-                elif ev.type == pygame.JOYDEVICEADDED and mando is None:
-                    mando = pygame.joystick.Joystick(ev.device_index)
-                    mando.init()
-                    print("Mando reconectado: %s | disposicion %s"
-                          % (mando.get_name(), elegir_disposicion(mando)))
+            # El aviso de alta puede llegar antes que el de baja: se reabre
+            # en cuanto vuelve a haber un mando, no con el evento
+            if mando is None and pygame.joystick.get_count() > 0:
+                mando = pygame.joystick.Joystick(0)
+                mando.init()
+                print("Mando reconectado: %s | disposicion %s"
+                      % (mando.get_name(), elegir_disposicion(mando)))
             # Sin mando no se envia nada: joy_udp_node pasa a neutro solo
             if mando is not None:
                 ejes, botones = leer(mando)
