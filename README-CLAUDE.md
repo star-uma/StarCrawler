@@ -40,7 +40,8 @@ contrastarlo con el código.
 | ESP32 con `HW_SIMULADO` | Verificado (28-09): el firmware real en el ESP32 del banco con la planta simulada dentro, contra el grafo entero y un mando por UDP. Ver el README de la app |
 | App de micro-ROS | Verificado con un ESP32 **sin nada conectado** (22-09): sesión con el agente, `error_bits` 111 (encoders + CAN + watchdog), ~49 Hz a 921600, reconexión en 5 s si el agente se reinicia. ESP-IDF **4.1** (la de `micro_ros_setup` humble), con `idf_compat.h` |
 | GUI y odometría con el ESP32 | Verificado (24-09) contra el ESP32 real: una suscripción fiable recibe 0 mensajes (rclpy avisa `incompatible policy: RELIABILITY`) y una best-effort ~50 Hz; odometría y GUI están en best-effort y la GUI marca `fuente: ros2 · 50 paq/s` sin simulador. **`ros2 topic echo /odom` no sirve para comprobarlo**: la odometría publica por temporizador aunque no le llegue estado |
-| Mando DS4 | Verificado en Windows por el puente UDP (22-09). El mapeo de `ds4.yaml` se corrigió en `7fd599e`. **Sin probar con el nodo `joy` real** del mini PC |
+| Mando DS4 | Verificado en Windows por el puente UDP (22-09). El mapeo de `ds4.yaml` se corrigió en `7fd599e`. **Sin probar con el nodo `joy` real** del mini PC. Desde el 28-09 pasa por `twist_mux` y `crawler_mux` (verificado con un mando virtual por UDP). Por Bluetooth, el puente usa DirectInput (`32200a1`): **falta que Mario confirme que llegan los ejes** |
+| Mando web (`gui_mando:=true`, #18) | Verificado (29-09) con el ESP32 en `HW_SIMULADO`, los muxes y el mando virtual: los seis casos de `docs/diseno_mando_web.md` (cerrar la pestaña para en ~0,5 s, el DS4 gana, la emergencia sigue tras cerrar, rearme rechazado con SHARE, matar `crawler_mux` da estado seguro, el preset del DS4 no vuelve). Ver `docs/ros2.md` §6 |
 | Vistas 3D (tarea 6) | Verificado en Humble (24-09): con el simulador, RViz (`plano.rviz`) y la web `/3d` a la vez; tras 8 s de `/cmd_vel` en curva las dos marcan x = 0,63 m, y = 0,97 m, rumbo 117°. 116/116 tests, 0 saltados. Con el ESP32, RViz pintaba el modelo en rojo: `/joint_states` salía con sello 0 y `robot_state_publisher` lo descartaba todo. Arreglado en `791080a` (hora sincronizada con el agente) |
 | Motores, encoders, CAN | **Nada verificado en hardware** |
 
@@ -227,13 +228,13 @@ Si crees de verdad que alguna hay que reabrirla, dilo y que decida Mario.
 ```
 ros2_ws/src/
   starcrawler_msgs/         CrawlerCommand y RobotState (CMake)
-  starcrawler_common/       conversión de ángulos, única fuente de verdad
+  starcrawler_common/       conversión de ángulos y esquema del mando (orugas.py)
   starcrawler_driver/       puente serie con CRC16 (el camino anterior)
   starcrawler_sim/          robot simulado a nivel de tópicos
   starcrawler_odometry/     odometría de orugas (TF odom -> base_footprint) y
                             chasis_node, el chasis apoyado en sus orugas
-  starcrawler_teleop/       mando DS4, joy_udp_node y twist_mux
-  starcrawler_gui/          interfaz web: :8000 y :8000/3d
+  starcrawler_teleop/       mando DS4, joy_udp_node, crawler_mux y mux.yaml
+  starcrawler_gui/          interfaz web: :8000 y :8000/3d, con el mando web
   starcrawler_description/  URDF y configuraciones de RViz
   starcrawler_bringup/      launch, systemd y udev
 
@@ -254,10 +255,11 @@ anterior; `simulate:=true` con su ESP32 simulado).
 ## 8. Issues que tocan esto
 
 - **#15** — Humble o Jazzy (tarea 7).
-- **#16** — migrar el ESP32 a micro-ROS: compila y funciona en el banco.
+- **#23** — validar la app de micro-ROS en el robot y retirar el camino serie
+  (la #16, la migración, está cerrada).
+- **#18** — la GUI de operación: con el mando web, hecha.
 - **#13** — calibrar geometría y mapeo del DS4.
 - **#21** — el bus CAN se cae con los cuatro motores (hardware, bloqueante).
 - **#7** — transceptor CAN del ESP32.
-- **#12** — primer `colcon build`: hecho, falta cerrarla.
 
 Todo en `github.com/star-uma/StarCrawler/issues`.

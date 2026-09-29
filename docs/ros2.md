@@ -68,16 +68,19 @@ Son excluyentes y el launch se encarga de que no se pisen: `sim:=true` y
 |---|---|
 | `starcrawler_msgs` | `CrawlerCommand` y `RobotState` |
 | `starcrawler_description` | URDF/xacro del robot |
-| `starcrawler_teleop` | Mando a `/cmd_vel_joy` y `/crawler/command` |
+| `starcrawler_teleop` | El DS4 como fuente de consignas, y `crawler_mux` |
 | `starcrawler_driver` | Puente serie con el ESP32 (modo robot real) |
 | `starcrawler_sim` | Robot simulado a nivel de tópicos |
 | `starcrawler_odometry` | `/odom` y la TF `odom -> base_footprint` |
-| `starcrawler_gui` | Interfaz web con el robot dibujado |
-| `starcrawler_common` | La traducción de ángulos, compartida |
+| `starcrawler_gui` | Interfaz web con el robot dibujado, y el mando web |
+| `starcrawler_common` | La traducción de ángulos y el esquema del mando (`orugas.py`), compartidos |
 | `starcrawler_bringup` | Launch, `systemd` y reglas `udev` |
 
-`twist_mux` viene de ROS, no es propio: elige entre las fuentes de velocidad
-por prioridad y descarta la que deje de publicar.
+`twist_mux` (de ROS) y `crawler_mux` (propio, lo mismo para `CrawlerCommand`)
+eligen entre las fuentes por prioridad y descartan la que deje de publicar. Las
+fuentes están en `starcrawler_teleop/config/mux.yaml`: el DS4 en reposo (10), la
+web (20) y el DS4 tocado (30), que gana siempre. Una emergencia de cualquiera
+sale al momento.
 
 
 ### ¿Por qué el ESP32 se queda?
@@ -430,6 +433,54 @@ superpuestas.
 | L3 | Velocidad lenta (×0.5) / rápida |
 | OPTIONS | Reservado (nivelado, requiere IMU) |
 
+### Mando desde la web (`gui_mando:=true`)
+
+La vista `/3d` lleva los mismos mandos que el DS4, con el mismo esquema (sale
+de `starcrawler_common/orugas.py`): pad de conducción, pares, cruceta, presets,
+Lento, Parar y EMERGENCIA. Funciona con ratón, en el móvil (táctil) y con
+teclado: WASD conducir, flechas inclinar, R/F delanteras, T/G traseras, 1–4
+presets (mantener), espacio emergencia, Esc parar.
+
+```bash
+ros2 launch starcrawler_bringup robot.launch.py gui_mando:=true
+```
+
+El log da el enlace con la clave, `http://<ip>:8000/3d#t=<clave>` (una al azar
+en cada arranque, o fija con `gui_clave:=...`). Sin la clave solo se ve la
+EMERGENCIA, que cualquiera puede pulsar.
+
+Cómo decide quién manda:
+
+- **Hombre muerto**: la página solo manda mientras hay algo pulsado (o un
+  preset enganchado en curso) y lo suelta todo ante la duda: pestaña oculta o
+  cerrada, pérdida de la conexión, respuesta lenta, otra fuente con el mando.
+  Tras soltar hay que volver a pulsar.
+- **Un solo puesto**: el primer navegador que manda es el dueño; los demás
+  reciben 409 hasta que pase 1 s de silencio.
+- **El DS4 gana** en cuanto se toca; la web vuelve a poder mandar cuando se
+  suelta.
+- **La emergencia web se engancha** en `crawler_mux` y sigue aunque se cierre
+  la página: se rearma con el botón Rearmar (mantener 1 s), y se rechaza si
+  alguien sigue pidiendo emergencia (SHARE pulsado). SHARE del DS4 para
+  mientras se mantiene.
+
+Probado el 29-09 con el ESP32 del banco (`HW_SIMULADO`) y los muxes: cerrar la
+pestaña conduciendo para en ~0,5 s; el DS4 le quita el mando a la web; la
+emergencia sigue tras cerrar; el rearme con SHARE pulsado se rechaza; matar
+`crawler_mux` deja el robot en estado seguro hasta que se relanza (1 s); un
+preset del DS4 no vuelve después de mandar la web.
+
+Límites: la clave viaja en claro y queda en `/rosout`; no protege de alguien
+con ROS 2 en la misma red (DDS y `joy_udp_node` no se autentican). Si
+`crawler_mux` se reinicia, pierde la emergencia enganchada (mientras está
+caído el ESP32 está en estado seguro). El estado seguro deja la tracción sin
+par. La EMERGENCIA no pide clave: cualquier página abierta en un navegador de
+la red del robot podría engancharla, y con ella no se puede rearmar. Con seis
+o más pestañas del robot abiertas en el mismo navegador, sus conexiones se
+agotan y el mando se queda en cola: no pasar de cinco. En el WSL, entrar por `localhost` o por la IP: el servidor escucha en
+IPv6 e IPv4 porque, si no, el navegador tarda 300 ms en cada petición a
+`localhost`.
+
 ---
 
 ## 7. Calibración pendiente
@@ -456,12 +507,16 @@ la **tabla de signos de la compensación de tracción**
 
 En capas, de dentro a fuera:
 
-1. **ESP32 (la que manda)**: watchdog de 300 ms sin trama válida → libera
-   tracción y detiene elevación. Límites software de recorrido (85°–275°).
-   Sin encoder válido, el lazo de posición de esa oruga se inhibe.
-2. **Driver del PC**: si `/cmd_vel` o `/crawler/command` se quedan viejos
-   (>0.5 s) manda ceros explícitos.
-3. **Teleop**: SHARE → flag de emergencia dedicado; sin `/joy` manda parada.
+1. **ESP32 (la que manda)**: watchdog de 300 ms por tópico. Sin
+   `/crawler/command`, que es el canal de la parada, libera tracción y detiene
+   elevación; sin `/cmd_vel`, la tracción baja a 0 con par. Descarta las
+   consignas con NaN. Límites software de recorrido (85°–275°). Sin encoder
+   válido, el lazo de posición de esa oruga se inhibe.
+2. **Muxes**: cada fuente caduca (0,25–0,5 s) y la emergencia de cualquiera
+   sale al momento; la web la engancha hasta rearmar. Se relanzan si caen.
+3. **Driver del PC** (firmware serie): si `/cmd_vel` se queda viejo (>0.5 s)
+   manda ceros; si es `/crawler/command`, emergencia.
+4. **Teleop**: SHARE → flag de emergencia dedicado; sin `/joy` manda parada.
    Hay un *deadman* opcional (`boton_enable`, desactivado por defecto).
 
 Las tramas llevan CRC16 y contadores de error, expuestos en `/diagnostics`:
