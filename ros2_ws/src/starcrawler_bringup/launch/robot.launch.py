@@ -109,12 +109,14 @@ def generate_launch_description():
     gui_mando = LaunchConfiguration('gui_mando')
     mux_yaml = PathJoinSubstitution([teleop_share, 'config', 'mux.yaml'])
 
-    # Los muxes hacen falta con cualquier fuente de consignas
-    con_mux = PythonExpression([
-        "'", teleop, "' == 'true' or '", gui_mando, "' == 'true'"])
-    con_gui = PythonExpression([
-        "'", LaunchConfiguration('gui'), "' == 'true' or '", gui_mando,
-        "' == 'true'"])
+    # Los muxes hacen falta con cualquier fuente de consignas. Como
+    # IfCondition, 'true', 'True' y '1' valen lo mismo
+    def si(valor):
+        return ["'", valor, "'.lower() in ('true', '1')"]
+
+    con_mux = PythonExpression(si(teleop) + [' or '] + si(gui_mando))
+    con_gui = PythonExpression(si(LaunchConfiguration('gui')) + [' or ']
+                               + si(gui_mando))
 
     # Solo una fuente de estado a la vez, por prioridad: sim, simulate,
     # driver serie y, si nada de eso, micro-ROS
