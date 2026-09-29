@@ -15,15 +15,23 @@ o un signo invertido se ven de un vistazo en las cuatro orugas dibujadas.
 
 La vista 3D (vista3d.py) necesita ademas /odom, /joint_states y el URDF de
 /robot_description, que se sirve traducido en /modelo.
+
+Con mando:=true la pagina /3d tambien conduce (issue #18): publica en
+cmd_vel_web y crawler/command_web, que entran a los muxes. Las rutas HTTP
+estan en servidor.py y la logica en mando_web.py; este nodo solo publica,
+y siempre desde su temporizador.
 """
 from __future__ import annotations
 
 import json
 import math
 import os
+import re
+import secrets
+import socket
 import threading
+import time
 import webbrowser
-from http.server import ThreadingHTTPServer
 
 import signal
 import rclpy
@@ -31,61 +39,36 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
-from std_msgs.msg import String
+from std_msgs.msg import Empty, String
 
-from starcrawler_msgs.msg import RobotState
+from starcrawler_msgs.msg import CrawlerCommand, RobotState
 
+from starcrawler_common import orugas
 from starcrawler_common.angulos import elevacion_a_encoder_deg
 
 from . import dashboard
-from .dashboard import Manejador, registrar
+from .dashboard import registrar
+from .mando_web import PRESET_MAX_S, Arbitro
+from .servidor import MODELO, THREE_LOCAL, crear_manejador, crear_servidor
 from .urdf_modelo import leer_urdf
-from .vista3d import THREE_CDN, enlazar_desde_2d, pagina_3d
 
 RAD_A_GRADOS = 57.29577951
-
-# Copia local de three.js para usar la vista 3D sin internet (opcional)
-THREE_LOCAL = os.path.join(os.path.dirname(__file__), 'static',
-                           'three.module.min.js')
-
-# Lo escribe el nodo al llegar /robot_description y lo lee el servidor HTTP
-_MODELO = {'json': None}
+PERIODO_MANDO_S = 0.02      # 50 Hz
+ENLACE_S = 1.0              # el mismo umbral que el indicador de dashboard.py
+AVISO_TELEOP_S = 5.0
 
 
-class ManejadorRos(Manejador):
-    """El de dashboard.py mas las rutas de la vista 3D."""
-
-    def do_GET(self):
-        if self.path == '/':
-            self._enviar(enlazar_desde_2d(dashboard.PAGINA),
-                         'text/html; charset=utf-8')
-        elif self.path == '/3d':
-            local = os.path.exists(THREE_LOCAL)
-            url = '/static/three.module.min.js' if local else THREE_CDN
-            self._enviar(pagina_3d(url), 'text/html; charset=utf-8')
-        elif self.path == '/modelo':
-            modelo = _MODELO['json']
-            if modelo is None:
-                self.send_error(503, 'Sin /robot_description todavia')
-            else:
-                self._enviar(modelo, 'application/json')
-        elif (self.path == '/static/three.module.min.js'
-              and os.path.exists(THREE_LOCAL)):
-            with open(THREE_LOCAL, 'rb') as f:
-                self._enviar(f.read(), 'text/javascript')
-        else:
-            super().do_GET()
-
-    def _enviar(self, cuerpo, tipo):
-        if isinstance(cuerpo, str):
-            cuerpo = cuerpo.encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', tipo)
-        self.send_header('Content-Length', str(len(cuerpo)))
-        self.end_headers()
-        self.wfile.write(cuerpo)
+def ip_local() -> str:
+    """La IP con la que este equipo sale a la red. No envia nada."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(('10.255.255.255', 1))
+            return s.getsockname()[0]
+    except OSError:
+        return '127.0.0.1'
 
 
 class NodoDashboard(Node):
@@ -97,8 +80,33 @@ class NodoDashboard(Node):
         # En el PC de a bordo no hay nadie delante de la pantalla, asi que
         # por defecto no se abre nada: se entra desde otro equipo.
         self.declare_parameter('abrir_navegador', False)
+        # Conducir desde /3d. Sin el, los POST responden 403
+        self.declare_parameter('mando', False)
+        # Vacia = una al azar en cada arranque
+        self.declare_parameter('mando_token', '')
+        # El launch pasa los de ds4.yaml: la web y el DS4 con los mismos topes
+        self.declare_parameter('max_lineal', orugas.MAX_LINEAL)
+        self.declare_parameter('max_angular', orugas.MAX_ANGULAR)
+        self.declare_parameter('factor_lento', orugas.FACTOR_LENTO)
+        self.declare_parameter('s_preset', orugas.S_PRESET)
+        self.declare_parameter('preset_max_s', PRESET_MAX_S)
 
         puerto = self.get_parameter('http_port').value
+        self.mando = bool(self.get_parameter('mando').value)
+
+        # Lo que el arbitro necesita del robot y de los muxes. Se escribe y
+        # se lee con lock_mando, que tambien protege al arbitro.
+        self.lock_mando = threading.Lock()
+        self._elev = [0.0] * 4
+        self._encoder_ok = [False] * 4
+        self._t_estado = None
+        self._activa = ''
+        self._mux_ok = False
+        self._rearme = False
+        self.arbitro = None
+        with dashboard.LOCK:
+            dashboard.ESTADO['seguridad'] = False
+            dashboard.ESTADO['mando'] = {'habilitado': False}
 
         # El ESP32 publica en best-effort: una suscripcion fiable no casa
         self.create_subscription(
@@ -116,19 +124,129 @@ class NodoDashboard(Node):
             String, 'robot_description', self.cb_descripcion,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 
-        self.servidor = ThreadingHTTPServer(('', puerto), ManejadorRos)
+        clave = self.preparar_mando() if self.mando else ''
+
+        manejador = crear_manejador(
+            arbitro=self.arbitro, lock=self.lock_mando, clave=clave,
+            mando=self.mando, contexto=self.contexto,
+            rearmar=self.pedir_rearme, reloj=time.monotonic)
+        self.servidor = crear_servidor(puerto, manejador)
         threading.Thread(target=self.servidor.serve_forever,
                          kwargs={'poll_interval': 0.1}, daemon=True).start()
 
         url = 'http://localhost:%d' % puerto
         self.get_logger().info('Dashboard en %s (vista 3D en %s/3d)'
                                % (url, url))
+        if self.mando:
+            self.get_logger().info('Mando web ACTIVO: http://%s:%d/3d#t=%s'
+                                   % (ip_local(), puerto, clave))
         if self.get_parameter('abrir_navegador').value:
             webbrowser.open(url)
+
+    # ─── Mando web ───────────────────────────────────────────────────────
+
+    def preparar_mando(self) -> str:
+        p = self.get_parameter
+        self.arbitro = Arbitro(
+            max_lineal=float(p('max_lineal').value),
+            max_angular=float(p('max_angular').value),
+            factor_lento=float(p('factor_lento').value),
+            s_preset=float(p('s_preset').value),
+            preset_max_s=float(p('preset_max_s').value))
+
+        self.pub_vel = self.create_publisher(Twist, 'cmd_vel_web', 10)
+        self.pub_orugas = self.create_publisher(
+            CrawlerCommand, 'crawler/command_web', 10)
+        self.pub_rearmar = self.create_publisher(
+            Empty, 'crawler_mux/rearmar', 10)
+        # crawler_mux la publica latcheada y solo al cambiar
+        self.create_subscription(
+            String, 'crawler_mux/activa', self.cb_activa,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.create_timer(PERIODO_MANDO_S, self.cb_mando)
+        self._aviso_teleop = self.create_timer(AVISO_TELEOP_S,
+                                               self.comprobar_teleop)
+
+        if not os.path.exists(THREE_LOCAL):
+            self.get_logger().warn(
+                'Sin copia local de three.js: sin internet /3d no dibuja el '
+                'robot (ver static/README.md)')
+        clave = str(p('mando_token').value)
+        # Va en la URL tal cual: con &, % o espacios la pagina no la leeria
+        if clave and not re.fullmatch(r'[A-Za-z0-9_-]{4,64}', clave):
+            self.get_logger().error(
+                'gui_clave solo admite letras, cifras, _ y - (de 4 a 64): '
+                'uso una al azar')
+            clave = ''
+        return clave or secrets.token_hex(5)
+
+    def comprobar_teleop(self):
+        self._aviso_teleop.cancel()
+        if 'starcrawler_teleop' not in self.get_node_names():
+            self.get_logger().warn(
+                'Mando web sin teleop: no hay parada fisica (SHARE), solo '
+                'la EMERGENCIA de la pagina')
+
+    def contexto(self):
+        """Para los hilos HTTP, que lo llaman con lock_mando cogido."""
+        return self._enlace(time.monotonic()), self._activa, self._mux_ok
+
+    def pedir_rearme(self):
+        # Tambien con lock_mando: el Empty lo publica cb_mando
+        self._rearme = True
+
+    def _enlace(self, t: float) -> bool:
+        return self._t_estado is not None and t - self._t_estado < ENLACE_S
+
+    def cb_activa(self, msg: String):
+        with self.lock_mando:
+            self._activa = msg.data
+
+    def cb_mando(self):
+        t = time.monotonic()
+        mux_ok = (self.pub_vel.get_subscription_count() > 0
+                  and self.pub_orugas.get_subscription_count() > 0)
+        with self.lock_mando:
+            self._mux_ok = mux_ok
+            robot = {'elev': self._elev, 'encoder_ok': self._encoder_ok,
+                     'enlace': self._enlace(t)}
+            c = self.arbitro.salida(t, robot)
+            estado = self.arbitro.estado(t, self._activa, mux_ok)
+            eventos = self.arbitro.sacar_eventos()
+            rearme, self._rearme = self._rearme, False
+        with dashboard.LOCK:
+            dashboard.ESTADO['mando'] = estado
+
+        for e in eventos:
+            self.get_logger().info(e)
+        if rearme:
+            self.get_logger().info('Rearme pedido desde la web')
+            self.pub_rearmar.publish(Empty())
+        if c is None:
+            return
+
+        vel = Twist()
+        vel.linear.x = float(c.lineal)
+        vel.angular.z = float(c.angular)
+        cmd = CrawlerCommand()
+        cmd.header.stamp = self.get_clock().now().to_msg()
+        cmd.increment = [int(v) for v in c.incremento]
+        cmd.use_position = bool(c.usar_posicion)
+        cmd.target = [float(v) for v in c.objetivo_rad]
+        cmd.emergency_stop = bool(c.emergencia)
+        self.pub_vel.publish(vel)
+        self.pub_orugas.publish(cmd)
+
+    # ─── Telemetria ──────────────────────────────────────────────────────
 
     def cb_estado(self, msg: RobotState):
         angulos = [elevacion_a_encoder_deg(i, msg.crawler_angle[i])
                    for i in range(4)]
+
+        with self.lock_mando:
+            self._elev = [float(a) for a in msg.crawler_angle]
+            self._encoder_ok = [bool(v) for v in msg.encoder_ok]
+            self._t_estado = time.monotonic()
 
         registrar(
             fuente='ros2',
@@ -142,6 +260,7 @@ class NodoDashboard(Node):
             con_imu=bool(msg.imu_ok),
             roll=None,
             pitch=None,
+            seguridad=bool(msg.safety_active),
         )
 
     # Estos dos no pasan por registrar(): no son tramas del robot y no
@@ -164,7 +283,7 @@ class NodoDashboard(Node):
 
     def cb_descripcion(self, msg: String):
         try:
-            _MODELO['json'] = json.dumps(leer_urdf(msg.data))
+            MODELO['json'] = json.dumps(leer_urdf(msg.data))
         except Exception as e:  # viene de fuera: no tumbar el nodo
             self.get_logger().error('No puedo leer /robot_description: %s' % e)
             return

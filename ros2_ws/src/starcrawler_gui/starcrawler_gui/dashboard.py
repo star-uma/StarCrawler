@@ -172,7 +172,8 @@ class Manejador(BaseHTTPRequestHandler):
                     self.wfile.write(f"data: {datos}\n\n".encode("utf-8"))
                     self.wfile.flush()
                     time.sleep(0.1)
-            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError,
+                    TimeoutError):
                 return
         else:
             self.send_error(404)
