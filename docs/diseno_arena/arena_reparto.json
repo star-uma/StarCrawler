@@ -1,0 +1,65 @@
+[
+ {
+  "parte": "A - Mundo: formato, geometría y arenas",
+  "ficheros": [
+   "ros2_ws/src/starcrawler_sim/starcrawler_sim/mundo_core.py",
+   "ros2_ws/src/starcrawler_sim/starcrawler_sim/mundo_check.py",
+   "ros2_ws/src/starcrawler_sim/mundos/llano.yaml",
+   "ros2_ws/src/starcrawler_sim/mundos/escalon.yaml",
+   "ros2_ws/src/starcrawler_sim/mundos/rampa.yaml",
+   "ros2_ws/src/starcrawler_sim/mundos/escalera.yaml",
+   "ros2_ws/src/starcrawler_sim/mundos/practica_rrl.yaml",
+   "ros2_ws/src/starcrawler_sim/test/test_mundo_core.py"
+  ],
+  "tarea": "Implementar el formato 1 de §3 y la API de §4, partiendo del prototipo scratchpad/arena/arena_proto.py. Hay que quitar del prototipo los cilindros, huecos, 'encima' y techos bilineales, y añadir la transformación a odom desde 'inicio'. Tareas: perfil() EXACTO con saltos verticales como vértices dobles y el índice por DDA; visual() con el contrato de dicts de §4.3 (triángulos antihorarios, gris por altura, aristas, zonas y etiquetas); resolver_ruta(); mundo_check con main(argv). Escribir las cinco arenas de §10, conservando en practica_rrl.yaml los comentarios de fuente del prototipo, y los tests de §11 (A). Módulo puro: sin rclpy ni numpy, Python 3.10. No tocar setup.py ni package.xml, que son de la parte C. Un commit, sin línea de coautor."
+ },
+ {
+  "parte": "B - Contacto orugas-terreno",
+  "ficheros": [
+   "ros2_ws/src/starcrawler_sim/starcrawler_sim/contacto_core.py",
+   "ros2_ws/src/starcrawler_sim/test/terreno_prueba.py",
+   "ros2_ws/src/starcrawler_sim/test/test_contacto_geometria.py",
+   "ros2_ws/src/starcrawler_sim/test/test_contacto_reposo.py",
+   "ros2_ws/src/starcrawler_sim/test/test_contacto_avance.py",
+   "ros2_ws/src/starcrawler_sim/test/medir_contacto.py"
+  ],
+  "tarea": "Implementar §5 completo con la API de §5.9: geometría desde el URDF reutilizando chasis_core; 9 líneas con caché de perfiles; restricciones exactas círculo/tangente/chasis contra la polilínea; clasificación apoyo/pared/tracción; reposo por plano de apoyo con brazos de palanca; vuelco sobre la arista hasta el primer contacto nuevo; subpasos, guardia, empuje acotado, bloqueado/sin_traccion/atrapado/volcado; colocar(). Solo necesita del terreno perfil(x0, y0, ux, uy, s0, s1); para los tests se escribe un terreno propio en terreno_prueba.py (cajas y rampas alineadas con los ejes, con perfil exacto, y GEO_PRUEBA con los números del URDF actual). No depende de la parte A. Base: los prototipos del scratchpad proto_contacto2d.py, proto2.py, proto4.py y proto5.py (la versión buena), con sus dos fallos de §5.8 como tests de regresión. Todos los tests de §11 (B) y medir_contacto.py (media y p99 en la escena de la escalera). Puro, Python 3.10, sin numpy; importa starcrawler_odometry.chasis_core y odometry_core. Un commit, sin línea de coautor."
+ },
+ {
+  "parte": "C - Nodo del mundo, launch, RViz y empaquetado",
+  "ficheros": [
+   "ros2_ws/src/starcrawler_sim/starcrawler_sim/mundo_node.py",
+   "ros2_ws/src/starcrawler_sim/starcrawler_sim/marcadores.py",
+   "ros2_ws/src/starcrawler_sim/test/test_marcadores.py",
+   "ros2_ws/src/starcrawler_sim/package.xml",
+   "ros2_ws/src/starcrawler_sim/setup.py",
+   "ros2_ws/src/starcrawler_bringup/launch/robot.launch.py",
+   "ros2_ws/src/starcrawler_bringup/launch/rviz.launch.py",
+   "ros2_ws/src/starcrawler_description/rviz/mundo.rviz",
+   "ros2_ws/src/starcrawler_description/urdf/starcrawler.urdf.xacro"
+  ],
+  "tarea": "Escribir mundo_node según §6: suscripciones y QoS; TF odom->base_footprint y juntas del chasis con el mismo sello; /mundo/verdad, /mundo/marcadores latcheado, /mundo/indicadores y /mundo/estado en JSON; el servicio /mundo/reiniciar; /initialpose; compuerta del bit 7 con modo espejo; recarga por mtime; tick a rate_hz con dt recortado; conversión de dict a Marker de §6.6. Escribir marcadores.py: estado_json() con prioridades y textos de §6.5, e indicadores() de §6.7, puros y probados con un Estado falso. Launch y URDF de §7 (argumento mundo, publish_tf por condición, chasis_node solo sin mundo, mundo_node con la geometría de odometry.yaml, elección del .rviz, límite de chassis_lift_joint). mundo.rviz de §8. package.xml y setup.py con las dependencias, los entry points mundo_node y mundo_check y el glob de mundos/*.yaml. Programar contra las APIs de §4.3 y §5.9 aunque A y B no estén mergeadas; sus tests no las necesitan. Con mundo vacío, el grafo tiene que quedar idéntico al de hoy. Commits separados por causa (nodo, launch, rviz, xacro), sin línea de coautor."
+ },
+ {
+  "parte": "D - Web /3d",
+  "ficheros": [
+   "ros2_ws/src/starcrawler_gui/starcrawler_gui/mundo_modelo.py",
+   "ros2_ws/src/starcrawler_gui/starcrawler_gui/gui_node.py",
+   "ros2_ws/src/starcrawler_gui/starcrawler_gui/servidor.py",
+   "ros2_ws/src/starcrawler_gui/starcrawler_gui/vista3d.py",
+   "ros2_ws/src/starcrawler_gui/package.xml",
+   "ros2_ws/src/starcrawler_gui/test/test_mundo_modelo.py",
+   "ros2_ws/src/starcrawler_gui/test/test_servidor.py",
+   "ros2_ws/src/starcrawler_gui/test/test_vista3d.py"
+  ],
+  "tarea": "Implementar §9. mundo_modelo.py: Traductor puro de MarkerArray a JSON (ADD, DELETE y DELETEALL en orden; tipos 11, 5, 4, 7, 0 y 9; omitidos). gui_node: cuatro suscripciones fuera de registrar(), un temporizador de caducidad a 5 Hz y el parámetro marco_fijo; la geometría nunca va por /events. servidor: GET /mundo, siempre 200 y no-store. vista3d, solo el módulo: carga reactiva por mundo_v; construirMarca común; la pose sale de verdad y, si no hay, de pose; indicadores; rastro real con z_suelo y fantasma de /odom; cámara que sigue la z con los botones Perfil y Detrás; sombras; etiquetas HTML con textContent; chip #terreno; sección Terreno y columna 'apoya'. No tocar el mando web. Tests de §11 (D). No depende de A, B ni C: basta con los contratos de §6.5 a §6.7. Si hay ROS a mano, prueba de humo con un script que publique un MarkerArray y un /mundo/estado falsos. Un commit por causa, sin línea de coautor."
+ },
+ {
+  "parte": "E - Integración y verificación en vivo (después de mergear A a D)",
+  "ficheros": [
+   "ros2_ws/src/starcrawler_sim/test/test_mundo_integracion.py",
+   "docs/mundo.md (propuesta, sin commitear)"
+  ],
+  "tarea": "Cuando A, B, C y D estén en la rama: escribir test_mundo_integracion.py de §11 (E), con mundo_core y contacto_core reales sobre las arenas de ejemplo; colcon build y colcon test en el WSL (0 saltados); medir_contacto.py (media < 5 ms, p99 < 15 ms; si no, bajar rate_hz a 25 y decirlo). Después, la verificación en vivo de §12 paso a paso: sin mundo idéntico a la tarea 6; llano igual a /odom; escalón con el mando virtual por UDP (un guion en el scratchpad a partir de mando_virtual.py); escalera y practica_rrl con el DS4 por joy_bridge y con el mando web; el ESP32 en HW_SIMULADO con el mismo guion (parada a ±5 mm de la de sim); modo espejo con simulate:=true; RViz relanzado; la web a 375 px. Anotar lo que se ha ejecutado de verdad y lo que no. Los fallos que salgan se arreglan en el fichero de su parte, con un commit por causa y sin línea de coautor. Proponer, sin commitear, docs/mundo.md y la fila de la sección 2 de README-CLAUDE; decide Mario."
+ }
+]
