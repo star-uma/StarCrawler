@@ -16,6 +16,10 @@ o un signo invertido se ven de un vistazo en las cuatro orugas dibujadas.
 La vista 3D (vista3d.py) necesita ademas /odom, /joint_states y el URDF de
 /robot_description, que se sirve traducido en /modelo.
 
+Con un mundo simulado (mundo:=, mundo_node) lee tambien /mundo/*: la
+geometria se sirve traducida en /mundo (mundo_modelo.py) y por /events solo
+van la version, la pose verdadera, el estado del terreno y los indicadores.
+
 Con mando:=true la pagina /3d tambien conduce (issue #18): publica en
 cmd_vel_web y crawler/command_web, que entran a los muxes. Las rutas HTTP
 estan en servidor.py y la logica en mando_web.py; este nodo solo publica,
@@ -37,12 +41,14 @@ import signal
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
+from rclpy.qos import (DurabilityPolicy, QoSProfile, ReliabilityPolicy,
+                       qos_profile_sensor_data)
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Empty, String
+from visualization_msgs.msg import MarkerArray
 
 from starcrawler_msgs.msg import CrawlerCommand, RobotState
 
@@ -52,13 +58,17 @@ from starcrawler_common.angulos import elevacion_a_encoder_deg
 from . import dashboard
 from .dashboard import registrar
 from .mando_web import PRESET_MAX_S, Arbitro
-from .servidor import MODELO, THREE_LOCAL, crear_manejador, crear_servidor
+from .mundo_modelo import Traductor, traducir_lista, validar_estado
+from .servidor import (MODELO, MUNDO, THREE_LOCAL, crear_manejador,
+                       crear_servidor)
 from .urdf_modelo import leer_urdf
 
 RAD_A_GRADOS = 57.29577951
 PERIODO_MANDO_S = 0.02      # 50 Hz
 ENLACE_S = 1.0              # el mismo umbral que el indicador de dashboard.py
 AVISO_TELEOP_S = 5.0
+PERIODO_CADUCA_S = 0.2      # 5 Hz
+CADUCA_S = 0.5              # terreno, marcas y verdad sin llegar -> None
 
 
 def ip_local() -> str:
@@ -90,9 +100,12 @@ class NodoDashboard(Node):
         self.declare_parameter('factor_lento', orugas.FACTOR_LENTO)
         self.declare_parameter('s_preset', orugas.S_PRESET)
         self.declare_parameter('preset_max_s', PRESET_MAX_S)
+        # Marco de los marcadores del mundo; los de otro marco no se dibujan
+        self.declare_parameter('marco_fijo', 'odom')
 
         puerto = self.get_parameter('http_port').value
         self.mando = bool(self.get_parameter('mando').value)
+        self.marco_fijo = str(self.get_parameter('marco_fijo').value)
 
         # Lo que el arbitro necesita del robot y de los muxes. Se escribe y
         # se lee con lock_mando, que tambien protege al arbitro.
@@ -123,6 +136,7 @@ class NodoDashboard(Node):
         self.create_subscription(
             String, 'robot_description', self.cb_descripcion,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.preparar_mundo()
 
         clave = self.preparar_mando() if self.mando else ''
 
@@ -288,6 +302,99 @@ class NodoDashboard(Node):
             self.get_logger().error('No puedo leer /robot_description: %s' % e)
             return
         self.get_logger().info('Modelo del robot cargado para la vista 3D')
+
+    # ─── Mundo simulado (mundo_node) ─────────────────────────────────────
+    # Tampoco pasan por registrar(). La geometria va a MUNDO (GET /mundo),
+    # nunca a /events.
+
+    def preparar_mundo(self):
+        self.traductor = Traductor(self.marco_fijo)
+        self._t_mundo = {'terreno': None, 'marcas': None, 'verdad': None}
+        with dashboard.LOCK:
+            dashboard.ESTADO['mundo_v'] = 0
+            for clave in self._t_mundo:
+                dashboard.ESTADO[clave] = None
+
+        self.create_subscription(
+            MarkerArray, 'mundo/marcadores', self.cb_marcadores,
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.create_subscription(
+            MarkerArray, 'mundo/indicadores', self.cb_indicadores,
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE))
+        self.create_subscription(
+            String, 'mundo/estado', self.cb_terreno,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+        self.create_subscription(
+            Odometry, 'mundo/verdad', self.cb_verdad, qos_profile_sensor_data)
+        self.create_timer(PERIODO_CADUCA_S, self.cb_caducar)
+
+    def _guardar(self, clave, valor):
+        with dashboard.LOCK:
+            dashboard.ESTADO[clave] = valor
+            self._t_mundo[clave] = time.monotonic()
+
+    def cb_marcadores(self, msg: MarkerArray):
+        try:
+            self.traductor.aplicar(msg.markers)
+            datos = self.traductor.a_json()
+            texto = json.dumps(datos)
+        except Exception as e:  # viene de fuera: no tumbar el nodo
+            self.get_logger().error('No puedo leer /mundo/marcadores: %s' % e)
+            return
+        # Primero el JSON: quien vea la version nueva ya lo encuentra
+        MUNDO['json'] = texto
+        MUNDO['version'] = datos['version']
+        with dashboard.LOCK:
+            dashboard.ESTADO['mundo_v'] = datos['version']
+        self.get_logger().info(
+            'Mundo para la vista 3D: %d piezas (version %d)'
+            % (len(datos['piezas']), datos['version']))
+        if datos['omitidos']:
+            self.get_logger().warn(
+                '%d marcadores del mundo sin dibujar en la web (tipo, marco '
+                'distinto de %s o numeros no finitos)'
+                % (datos['omitidos'], self.marco_fijo))
+
+    def cb_indicadores(self, msg: MarkerArray):
+        try:
+            marcas = traducir_lista(msg.markers, self.marco_fijo)
+        except Exception as e:
+            self.get_logger().warn('/mundo/indicadores ignorado: %s' % e,
+                                   throttle_duration_sec=5.0)
+            return
+        self._guardar('marcas', marcas)
+
+    def cb_terreno(self, msg: String):
+        try:
+            terreno = validar_estado(msg.data)
+        except ValueError as e:
+            self.get_logger().warn('/mundo/estado ignorado: %s' % e,
+                                   throttle_duration_sec=5.0)
+            return
+        self._guardar('terreno', terreno)
+
+    def cb_verdad(self, msg: Odometry):
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation
+        # La misma formula ZYX que cb_odom
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        verdad = [p.x, p.y, yaw, msg.twist.twist.linear.x,
+                  msg.twist.twist.angular.z, p.z]
+        if not all(math.isfinite(v) for v in verdad):
+            self.get_logger().warn('/mundo/verdad con numeros no finitos',
+                                   throttle_duration_sec=5.0)
+            return
+        self._guardar('verdad', verdad)
+
+    def cb_caducar(self):
+        t = time.monotonic()
+        with dashboard.LOCK:
+            for clave, t0 in self._t_mundo.items():
+                if t0 is not None and t - t0 > CADUCA_S:
+                    dashboard.ESTADO[clave] = None
+                    self._t_mundo[clave] = None
 
     def destroy_node(self):
         self.servidor.shutdown()

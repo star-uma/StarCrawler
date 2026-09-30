@@ -1,8 +1,8 @@
 """
 servidor.py — las rutas HTTP de gui_node, sin ROS
 =================================================
-GET: la telemetria 2D y /events (de dashboard.py), /3d, /modelo y la copia
-local de three.js. POST: /mando, /emergencia y /rearmar, que solo
+GET: la telemetria 2D y /events (de dashboard.py), /3d, /modelo, /mundo y
+la copia local de three.js. POST: /mando, /emergencia y /rearmar, que solo
 responden con mando:=true.
 
 Lo que viene del nodo llega como atributos de clase (crear_manejador): el
@@ -36,6 +36,9 @@ THREE_LOCAL = os.path.join(os.path.dirname(__file__), 'static',
 
 # Lo escribe el nodo al llegar /robot_description y lo lee el servidor HTTP
 MODELO = {'json': None}
+# Igual con /mundo/marcadores. Sin mundo, /mundo responde MUNDO_VACIO
+MUNDO = {'json': None, 'version': 0}
+MUNDO_VACIO = json.dumps({'version': 0, 'piezas': [], 'omitidos': 0})
 
 
 class ManejadorRos(Manejador):
@@ -66,6 +69,13 @@ class ManejadorRos(Manejador):
                 self.send_error(503, 'Sin /robot_description todavia')
             else:
                 self._enviar(modelo, 'application/json')
+        elif self.path == '/mundo':
+            # No tener mundo es lo normal: siempre 200
+            cuerpo = (MUNDO['json'] or MUNDO_VACIO).encode('utf-8')
+            self.connection.settimeout(60)      # puede pasar de 1 MB
+            self.send_response(200)
+            self.send_header('Cache-Control', 'no-store')
+            self._cabeceras_y_cuerpo(cuerpo, 'application/json')
         elif (self.path == '/static/three.module.min.js'
               and os.path.exists(THREE_LOCAL)):
             # timeout vale para cada operacion: 5 s no dan para 700 KB en una

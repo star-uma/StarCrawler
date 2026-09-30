@@ -11,6 +11,16 @@ La geometria no esta escrita aqui: la pagina pide /modelo, que es el URDF
 de /robot_description ya traducido por urdf_modelo.py. Dibuja lo mismo
 que RViz, con los mismos signos, porque sale del mismo sitio.
 
+Con un mundo simulado (mundo_node) llegan ademas:
+
+    mundo_v  version de la geometria; al cambiar, la pagina pide /mundo
+    verdad   [x, y, yaw, v, w, z] de /mundo/verdad (z de base_link)
+    terreno  el JSON de /mundo/estado, validado
+    marcas   /mundo/indicadores ya traducidos (mundo_modelo.py)
+
+Con verdad, el robot va donde esta de verdad y /odom queda como rastro
+fantasma. La altura, el cabeceo y el balanceo llegan en las juntas.
+
 three.js se carga de una copia local si existe (static/, ver README del
 paquete) y si no del CDN. Sin internet y sin copia, la pagina lo avisa.
 
@@ -104,16 +114,41 @@ _PAGINA = r"""<!DOCTYPE html>
           color:var(--tinta2); padding:1px 0; }
   .dato b { color:var(--tinta); font-weight:600; }
   .num { font-variant-numeric:tabular-nums; }
-  .oruga { display:grid; grid-template-columns:12px 28px 1fr auto; gap:8px;
-           align-items:center; font-size:13px; padding:2px 0; }
+  .oruga { display:grid; grid-template-columns:12px 28px 1fr auto auto;
+           gap:8px; align-items:center; font-size:13px; padding:2px 0; }
   .oruga i { width:12px; height:12px; border-radius:3px; }
   .oruga .mal { color:var(--critico); }
+  .oruga .apagado { color:var(--apagado); }
   .botones { display:flex; flex-wrap:wrap; gap:6px; }
   button { font:inherit; font-size:12px; color:var(--tinta);
            background:var(--rejilla); border:1px solid var(--borde);
            border-radius:6px; padding:5px 10px; cursor:pointer; }
   button[aria-pressed="true"] { border-color:var(--s1); color:var(--s1); }
+  button[hidden] { display:none; }
   .ayuda { font-size:11px; color:var(--apagado); margin-top:8px; }
+  /* Mundo simulado: etiquetas y chip por debajo del mando (z-index 2); el
+     chip va despues en el HTML para quedar encima de las etiquetas */
+  #etiquetas { position:absolute; inset:0; z-index:1; pointer-events:none;
+               overflow:hidden; }
+  #etiquetas[hidden] { display:none; }
+  .etiqueta { position:absolute; left:0; top:0; padding:1px 5px;
+              border-radius:4px; font-size:11px; line-height:1.3;
+              white-space:nowrap; color:var(--tinta2);
+              background:rgba(13,13,13,.6); }
+  #terreno { position:absolute; top:10px; left:50%; z-index:1;
+             transform:translateX(-50%); max-width:calc(100% - 20px);
+             width:max-content;   /* si no, left:50% lo corta a media escena */
+             padding:4px 10px; border-radius:6px; background:var(--aviso);
+             color:#0d0d0d; font-size:12px; font-weight:600;
+             letter-spacing:.06em; text-align:center; pointer-events:none; }
+  #terreno[hidden] { display:none; }
+  #terreno.rojo { background:var(--critico); }
+  #terreno.gris { background:var(--apagado); }
+  #escena.estrecho #terreno { top:auto; bottom:10px; }
+  #secTerreno[hidden] { display:none; }
+  #secTerreno h2 { margin-top:14px; }
+  .dato b.ambar { color:var(--aviso); }
+  .dato b.rojo { color:var(--critico); }
 __MANDO_CSS__
   @media (max-width:760px) {
     main { flex-direction:column; }
@@ -131,11 +166,13 @@ __MANDO_CSS__
 <main>
   <div id="escena">
     <div id="sinEnlace" hidden>SIN ENLACE</div>
+    <div id="etiquetas"></div>
+    <div id="terreno" role="status" hidden></div>
     <div id="aviso">Cargando la vista…</div>
 __MANDO_HTML__
   </div>
   <aside class="tarjeta">
-    <h2>Posición (odom)</h2>
+    <h2 id="tPos">Posición (odom)</h2>
     <div class="dato"><span>x</span><b class="num" id="px">–</b></div>
     <div class="dato"><span>y</span><b class="num" id="py">–</b></div>
     <div class="dato"><span>rumbo</span><b class="num" id="pyaw">–</b></div>
@@ -143,13 +180,28 @@ __MANDO_HTML__
     <h2>Velocidad</h2>
     <div class="dato"><span>lineal</span><b class="num" id="vlin">–</b></div>
     <div class="dato"><span>giro</span><b class="num" id="vang">–</b></div>
+    <div id="secTerreno" hidden>
+      <h2>Terreno</h2>
+      <div class="dato"><span>estado</span><b id="tEstado">–</b></div>
+      <div class="dato"><span>cabeceo</span><b class="num" id="tCabeceo">–</b></div>
+      <div class="dato"><span>balanceo</span><b class="num" id="tBalanceo">–</b></div>
+      <div class="dato"><span>altura del chasis</span><b class="num" id="tAltura">–</b></div>
+      <div class="dato"><span>margen de apoyo</span><b class="num" id="tMargen">–</b></div>
+      <div class="dato"><span>real / orugas</span><b class="num" id="tAvance">–</b></div>
+      <div class="dato"><span>patinado</span><b class="num" id="tPatinado">–</b></div>
+      <div class="dato"><span>error de odometría</span><b class="num" id="tErrOdom">–</b></div>
+    </div>
     <h2>Orugas (elevación)</h2>
     <div id="orugas"></div>
     <h2>Cámara</h2>
     <div class="botones">
       <button id="bSeguir" aria-pressed="true">Seguir al robot</button>
+      <button id="bPerfil" aria-pressed="false">Perfil</button>
+      <button id="bDetras" aria-pressed="false">Detrás</button>
       <button id="bCenital">Cenital</button>
       <button id="bRastro">Borrar rastro</button>
+      <button id="bSombras" aria-pressed="true" hidden>Sombras</button>
+      <button id="bEtiquetas" aria-pressed="true" hidden>Etiquetas</button>
     </div>
     <p class="ayuda">Arrastrar: girar · Rueda o pellizco: zoom ·
       Mayús + arrastrar o botón derecho: desplazar</p>
@@ -199,6 +251,9 @@ const contenedor = $('escena');
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(css('--pagina'));
+// Solo hay sombras con mundo: las enciende sol.castShadow (aplicarSombras)
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 contenedor.prepend(renderer.domElement);
 
 const escena = new THREE.Scene();
@@ -206,15 +261,30 @@ const camara = new THREE.PerspectiveCamera(50, 1, 0.05, 200);
 camara.up.set(0, 0, 1);
 
 escena.add(new THREE.HemisphereLight(0xffffff, 0x303030, 2.2));
+// El sol sigue al robot desde (3, -2, 6): la misma luz de siempre
+const SOL = new THREE.Vector3(3, -2, 6);
 const sol = new THREE.DirectionalLight(0xffffff, 1.8);
-sol.position.set(3, -2, 6);
-escena.add(sol);
+sol.position.copy(SOL);
+const ladoSombra = window.innerWidth < 760 ? 1024 : 2048;
+sol.shadow.mapSize.set(ladoSombra, ladoSombra);
+Object.assign(sol.shadow.camera, {left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 20});
+sol.shadow.camera.updateProjectionMatrix();
+sol.shadow.bias = -0.0005;
+sol.shadow.normalBias = 0.01;
+escena.add(sol, sol.target);
 
 // Suelo de 20 x 20 m en celdas de 0,5 m, como plano.rviz
 const rejilla = new THREE.GridHelper(20, 40, css('--eje'), css('--rejilla'));
 rejilla.rotation.x = Math.PI / 2;
 escena.add(rejilla);
 escena.add(new THREE.AxesHelper(0.5));   // origen de odom: X rojo, Y verde
+// Recibe las sombras sobre la rejilla
+const sueloSombra = new THREE.Mesh(new THREE.PlaneGeometry(20, 20),
+  new THREE.ShadowMaterial({opacity: 0.35, depthWrite: false}));
+sueloSombra.position.z = 0.0005;
+sueloSombra.receiveShadow = true;
+sueloSombra.visible = false;
+escena.add(sueloSombra);
 
 /* ── Robot construido desde el URDF ───────────────────────────────────── */
 // URDF rpy = Rz(yaw) Ry(pitch) Rx(roll), que en three.js es el orden ZYX
@@ -253,6 +323,7 @@ function construir(m) {
         new THREE.LineBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.3})));
       malla.position.fromArray(v.origen.xyz);
       malla.quaternion.copy(cuaternion(v.origen.rpy));
+      malla.castShadow = true;
       grupo.add(malla);
     }
     links[nombre] = grupo;
@@ -317,62 +388,279 @@ async function cargarModelo() {
   }
 }
 
-/* ── Rastro del recorrido ─────────────────────────────────────────────── */
+/* ── Rastros: el real y, con mundo, el fantasma de /odom ──────────────── */
 const MAX_RASTRO = 20000;
-const puntos = new Float32Array(MAX_RASTRO * 3);
-const geoRastro = new THREE.BufferGeometry();
-geoRastro.setAttribute('position', new THREE.BufferAttribute(puntos, 3));
-geoRastro.setDrawRange(0, 0);
-const rastro = new THREE.Line(geoRastro, new THREE.LineBasicMaterial({color: css('--s1')}));
-rastro.frustumCulled = false;   // la esfera envolvente no se recalcula
-escena.add(rastro);
-let nRastro = 0;
 
-function anadirRastro(x, y) {
-  if (nRastro > 0) {
-    const i = (nRastro - 1) * 3;
-    if (Math.hypot(x - puntos[i], y - puntos[i + 1]) < 0.02) return;
-  }
-  if (nRastro >= MAX_RASTRO) {             // lleno: se tira la mitad antigua
-    puntos.copyWithin(0, (MAX_RASTRO / 2) * 3);
-    nRastro = MAX_RASTRO / 2;
-  }
-  puntos.set([x, y, 0.004], nRastro * 3);
-  nRastro++;
-  geoRastro.setDrawRange(0, nRastro);
-  geoRastro.attributes.position.needsUpdate = true;
+function crearRastro(material, discontinuo) {
+  const r = {pos: new Float32Array(MAX_RASTRO * 3), n: 0,
+             dist: discontinuo ? new Float32Array(MAX_RASTRO) : null};
+  r.geo = new THREE.BufferGeometry();
+  r.geo.setAttribute('position', new THREE.BufferAttribute(r.pos, 3));
+  // LineDashedMaterial necesita la distancia recorrida en cada vertice
+  if (r.dist) r.geo.setAttribute('lineDistance', new THREE.BufferAttribute(r.dist, 1));
+  r.geo.setDrawRange(0, 0);
+  r.linea = new THREE.Line(r.geo, material);
+  r.linea.frustumCulled = false;   // la esfera envolvente no se recalcula
+  escena.add(r.linea);
+  return r;
 }
 
-function borrarRastro() { nRastro = 0; geoRastro.setDrawRange(0, 0); }
+const rastro = crearRastro(new THREE.LineBasicMaterial({color: css('--s1')}), false);
+const fantasma = crearRastro(new THREE.LineDashedMaterial(
+  {color: css('--apagado'), dashSize: 0.05, gapSize: 0.04}), true);
+
+function anadirRastro(r, x, y, z) {
+  let d = 0;
+  if (r.n > 0) {
+    const i = (r.n - 1) * 3;
+    d = Math.hypot(x - r.pos[i], y - r.pos[i + 1], z - r.pos[i + 2]);
+    if (d < 0.02) return;
+  }
+  if (r.n >= MAX_RASTRO) {                 // lleno: se tira la mitad antigua
+    r.pos.copyWithin(0, (MAX_RASTRO / 2) * 3);
+    if (r.dist) r.dist.copyWithin(0, MAX_RASTRO / 2);
+    r.n = MAX_RASTRO / 2;
+  }
+  r.pos.set([x, y, z], r.n * 3);
+  if (r.dist) {
+    r.dist[r.n] = r.n ? r.dist[r.n - 1] + d : 0;
+    r.geo.attributes.lineDistance.needsUpdate = true;
+  }
+  r.n++;
+  r.geo.setDrawRange(0, r.n);
+  r.geo.attributes.position.needsUpdate = true;
+}
+
+function borrarRastro(r) { r.n = 0; r.geo.setDrawRange(0, 0); }
+
+/* ── Mundo simulado: /mundo (fijo) y marcas (indicadores, en cada evento) */
+const grupoMundo = new THREE.Group(), grupoMarcas = new THREE.Group();
+escena.add(grupoMundo, grupoMarcas);
+const capaEtiquetas = $('etiquetas');
+const etiquetas = {mundo: [], marcas: []};             // [{el, ancla}]
+const geoEsfera = new THREE.SphereGeometry(0.5, 16, 12);  // diametro 1
+let hayMundo = false, sombras = true;
+let mundoCargado = -1, pidiendoMundo = false, tFalloMundo = -1e9;
+let marcasVistas = '';
+
+// sRGB -> lineal, como color()
+function lineal(colores) {
+  const c = new THREE.Color(), out = new Float32Array(colores.length);
+  for (let i = 0; i < colores.length; i += 4) {
+    c.setRGB(colores[i], colores[i + 1], colores[i + 2], THREE.SRGBColorSpace);
+    out[i] = c.r; out[i + 1] = c.g; out[i + 2] = c.b; out[i + 3] = colores[i + 3];
+  }
+  return out;
+}
+
+function alfaMinimo(colores) {
+  let a = 1;
+  for (let i = 3; i < colores.length; i += 4) a = Math.min(a, colores[i]);
+  return a;
+}
+
+function transparencia(obj, alfa) {
+  if (alfa >= 1) return;
+  Object.assign(obj.material, {transparent: true, opacity: alfa, depthWrite: false});
+  obj.renderOrder = 1;
+}
+
+const cssColor = c => `rgb(${c.slice(0, 3).map(v => Math.round(v * 255)).join(',')})`;
+
+// Una pieza de mundo_modelo -> Object3D. Los textos van a la capa HTML.
+function construirMarca(p, lista, conSombra) {
+  const pieza = new THREE.Group();
+  pieza.position.fromArray(p.pos);
+  pieza.quaternion.set(p.quat[0], p.quat[1], p.quat[2], p.quat[3]);   // Z arriba, como ROS
+  if (p.tipo === 'texto') {
+    const el = document.createElement('div');
+    el.className = 'etiqueta';
+    el.textContent = p.texto;             // viene de ROS: nunca como HTML
+    el.style.color = cssColor(p.color);
+    el.style.visibility = 'hidden';
+    capaEtiquetas.appendChild(el);
+    lista.push({el, ancla: pieza});
+    return pieza;
+  }
+  const conColores = !!p.colores;
+  const base = conColores ? [1, 1, 1, alfaMinimo(p.colores)] : p.color;
+  let obj;
+  if (p.tipo === 'triangulos' || p.tipo === 'lineas' || p.tipo === 'tira') {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(p.puntos, 3));
+    if (conColores) geo.setAttribute('color', new THREE.BufferAttribute(lineal(p.colores), 4));
+    if (p.tipo === 'triangulos') {
+      geo.computeVertexNormals();
+      obj = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: color(base), roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
+        vertexColors: conColores,
+        // Las aristas se dibujan encima sin parpadear
+        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1}));
+      if (p.escala.every(v => v !== 0)) obj.scale.fromArray(p.escala);
+      obj.castShadow = obj.receiveShadow = conSombra && base[3] >= 1;
+    } else {
+      const mat = new THREE.LineBasicMaterial({color: color(base), vertexColors: conColores});
+      obj = p.tipo === 'lineas' ? new THREE.LineSegments(geo, mat) : new THREE.Line(geo, mat);
+    }
+    transparencia(obj, base[3]);
+  } else if (p.tipo === 'esferas') {
+    const n = p.puntos.length / 3;
+    if (!n) return null;
+    obj = new THREE.InstancedMesh(geoEsfera, new THREE.MeshStandardMaterial(
+      {color: color(base), roughness: 0.9, metalness: 0}), n);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3();
+    const tam = new THREE.Vector3().fromArray(p.escala), c = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      obj.setMatrixAt(i, m.compose(v.fromArray(p.puntos, 3 * i), q, tam));
+      if (conColores) {
+        obj.setColorAt(i, c.setRGB(p.colores[4 * i], p.colores[4 * i + 1],
+                                   p.colores[4 * i + 2], THREE.SRGBColorSpace));
+      }
+    }
+    obj.frustumCulled = false;
+    transparencia(obj, base[3]);
+  } else if (p.tipo === 'flecha') {
+    // RViz: escala = (diametro del asta, diametro de la punta, largo de la punta)
+    const a = new THREE.Vector3().fromArray(p.puntos, 0);
+    const d = new THREE.Vector3().fromArray(p.puntos, 3).sub(a);
+    const largo = d.length();
+    if (largo < 1e-6) return null;
+    const punta = Math.min(p.escala[2] || 0.3 * largo, 0.9 * largo);
+    obj = new THREE.ArrowHelper(d.normalize(), a, largo, color(p.color), punta,
+                                p.escala[1] || 0.5 * punta);
+  } else {
+    return null;
+  }
+  pieza.add(obj);
+  return pieza;
+}
+
+function vaciar(grupo, lista) {
+  grupo.traverse(o => {
+    if (o.material) o.material.dispose();
+    // geoEsfera y la geometria de ArrowHelper son compartidas
+    const compartida = o.geometry === geoEsfera || (o.parent && o.parent.type === 'ArrowHelper');
+    if (o.geometry && !compartida) o.geometry.dispose();
+    if (o.isInstancedMesh) o.dispose();
+  });
+  grupo.clear();
+  for (const e of lista) e.el.remove();
+  lista.length = 0;
+}
+
+async function cargarMundo() {
+  pidiendoMundo = true;
+  try {
+    const r = await fetch('/mundo', {cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const m = await r.json();
+    vaciar(grupoMundo, etiquetas.mundo);
+    for (const p of m.piezas) {
+      const o = construirMarca(p, etiquetas.mundo, true);
+      if (o) grupoMundo.add(o);
+    }
+    mundoCargado = m.version;
+    hayMundo = m.piezas.length > 0;
+    if (m.omitidos) console.warn(m.omitidos + ' marcadores del mundo sin dibujar');
+    $('bSombras').hidden = !hayMundo;
+    $('bEtiquetas').hidden = !hayMundo;
+    aplicarSombras();
+  } catch (e) {
+    tFalloMundo = performance.now();     // servidor reiniciando: reintentar
+  }
+  pidiendoMundo = false;
+}
+
+function aplicarSombras() {
+  const si = hayMundo && sombras;
+  sueloSombra.visible = si;
+  if (sol.castShadow === si) return;
+  sol.castShadow = si;
+  // Los materiales ya compilados no se enteran solos
+  escena.traverse(o => { if (o.material) o.material.needsUpdate = true; });
+}
+
+function ponerMarcas(marcas) {
+  const clave = marcas ? JSON.stringify(marcas) : '';
+  if (clave === marcasVistas) return;
+  marcasVistas = clave;
+  vaciar(grupoMarcas, etiquetas.marcas);
+  for (const p of marcas || []) {
+    const o = construirMarca(p, etiquetas.marcas, false);
+    if (o) grupoMarcas.add(o);
+  }
+  colocarEtiquetas(etiquetas.marcas);     // ya, para que no parpadeen
+}
+
+/* ── Etiquetas HTML: un ancla proyectada en cada fotograma ─────────────── */
+const vAncla = new THREE.Vector3();
+
+function colocarEtiquetas(lista) {
+  if (capaEtiquetas.hidden) return;
+  const w = contenedor.clientWidth, h = contenedor.clientHeight;
+  for (const e of lista) {
+    e.ancla.getWorldPosition(vAncla);
+    const lejos = vAncla.distanceTo(camara.position) > 8;
+    vAncla.project(camara);
+    const oculta = lejos || vAncla.z > 1;          // lejos o detras de la camara
+    e.el.style.visibility = oculta ? 'hidden' : 'visible';
+    if (!oculta) {
+      e.el.style.transform = `translate(${(vAncla.x + 1) / 2 * w}px, ` +
+        `${(1 - vAncla.y) / 2 * h}px) translate(-50%, -50%)`;
+    }
+  }
+}
 
 /* ── Datos: el mismo /events que la vista 2D ──────────────────────────── */
 // Llegan a 10 Hz; se suaviza hacia el ultimo valor para que no de saltos.
 // El EventSource lo abre el script del mando: uno solo por pagina.
-const objetivo = {x: 0, y: 0, yaw: 0, juntas: {}};
-const visto = {x: 0, y: 0, yaw: 0, juntas: {}};
+const Z_CENTRO = 0.1;                      // altura de la camara sin mundo
+const objetivo = {x: 0, y: 0, yaw: 0, z: Z_CENTRO, juntas: {}};
+const visto = {x: 0, y: 0, yaw: 0, z: Z_CENTRO, juntas: {}};
+const odomVista = {x: 0, y: 0};
 let hayPose = false, recorrido = 0;
 
 const difAngulo = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
+// Al reconectar puede ser otro gui_node: volver a pedir el mundo
+window.estadoRobot.addEventListener('open', () => { mundoCargado = -1; });
+
 window.estadoRobot.addEventListener('message', ev => {
   const s = JSON.parse(ev.data);
-  if (s.pose) {
-    const [x, y, yaw] = s.pose;
+  const t = s.terreno;
+  const zSuelo = t && typeof t.z_suelo === 'number' ? t.z_suelo : 0;
+  // Con mundo, la pose verdadera; sin el, la de /odom como siempre
+  const real = s.verdad || s.pose;
+  if (real) {
+    const [x, y, yaw] = real;
+    const z = s.verdad ? s.verdad[5] : Z_CENTRO;
     const salto = Math.hypot(x - objetivo.x, y - objetivo.y);
     if (!hayPose || salto > 1.0) {
       // Primera pose, o la odometria se ha reiniciado: sin transicion
-      Object.assign(visto, {x, y, yaw});
-      if (hayPose) { borrarRastro(); recorrido = 0; }
+      Object.assign(visto, {x, y, yaw, z});
+      if (hayPose) { borrarRastro(rastro); recorrido = 0; }
     } else {
       recorrido += salto;
     }
-    Object.assign(objetivo, {x, y, yaw});
+    Object.assign(objetivo, {x, y, yaw, z});
     hayPose = true;
     // Aqui y no en el bucle de dibujo: el navegador frena ese bucle con la
     // pestana en segundo plano y el rastro saldria a trozos rectos
-    anadirRastro(x, y);
+    anadirRastro(rastro, x, y, zSuelo + 0.004);
+  }
+  fantasma.linea.visible = !!s.verdad;
+  if (s.verdad && s.pose) {
+    const [x, y] = s.pose;
+    if (Math.hypot(x - odomVista.x, y - odomVista.y) > 1.0) borrarRastro(fantasma);
+    Object.assign(odomVista, {x, y});
+    anadirRastro(fantasma, x, y, zSuelo + 0.006);
   }
   if (s.joints) Object.assign(objetivo.juntas, s.joints);
+  if (typeof s.mundo_v === 'number' && s.mundo_v !== mundoCargado && !pidiendoMundo &&
+      performance.now() - tFalloMundo > 2000) {
+    cargarMundo();
+  }
+  ponerMarcas(s.marcas);
   panel(s);
 });
 
@@ -387,20 +675,22 @@ function panel(s) {
     ((s.err >> 7) & 1 ? ' · HARDWARE SIMULADO' : '');
   $('sinEnlace').hidden = !!s.enlace;
 
-  const p = s.pose;
-  $('px').textContent = p ? fmt(p[0], 2, 'm') : 'sin /odom';
-  $('py').textContent = p ? fmt(p[1], 2, 'm') : '–';
-  $('pyaw').textContent = p ? fmt(p[2] * 180 / Math.PI, 0, '°') : '–';
-  $('pdist').textContent = p ? fmt(recorrido, 2, 'm') : '–';
+  const p = s.pose, r = s.verdad || s.pose;
+  $('tPos').textContent = s.verdad ? 'Posición (real)' : 'Posición (odom)';
+  $('px').textContent = r ? fmt(r[0], 2, 'm') : 'sin /odom';
+  $('py').textContent = r ? fmt(r[1], 2, 'm') : '–';
+  $('pyaw').textContent = r ? fmt(r[2] * 180 / Math.PI, 0, '°') : '–';
+  $('pdist').textContent = r ? fmt(recorrido, 2, 'm') : '–';
   $('vlin').textContent = p ? fmt(p[3], 2, 'm/s') : '–';
   $('vang').textContent = p ? fmt(p[4] * 180 / Math.PI, 1, '°/s') : '–';
 
+  const t = s.terreno;
   $('orugas').innerHTML = JUNTA.map((nombre, i) => {
     const q = s.joints ? s.joints[nombre] : undefined;
     const ok = !((s.err >> i) & 1);
     const ang = (q === undefined) ? '–' : (q >= 0 ? '+' : '') + (q * 180 / Math.PI).toFixed(1) + '°';
     return `<div class="oruga"><i style="background:${COLOR[i]}"></i><b>${NOMBRE[i]}</b>` +
-      `<span class="num">${ang}</span>` +
+      `<span class="num">${ang}</span>` + apoya(t, i) +
       `<span class="${ok ? '' : 'mal'}">${ok ? '✓' : '✕ enc'}</span></div>`;
   }).join('');
 
@@ -409,16 +699,113 @@ function panel(s) {
       if (robot.juntas[nombre]) marcarEncoder(robot.juntas[nombre], !((s.err >> i) & 1));
     });
   }
+  pintarTerreno(s);
+}
+
+// Columna 'apoya' de #orugas: solo numeros, nada de texto de ROS
+function apoya(t, i) {
+  if (!t || !Array.isArray(t.apoya)) return '';
+  if (t.apoya[i]) return '<span title="apoya">●</span>';
+  const h = Array.isArray(t.holgura) ? t.holgura[i] : null;
+  const cm = typeof h === 'number' ? ' ' + (h * 100).toFixed(1) + ' cm' : '';
+  return `<span class="num apagado" title="no apoya">○${cm}</span>`;
+}
+
+/* ── Terreno: chip en la escena y seccion del panel ───────────────────── */
+const ESTADOS = {libre: 'libre', bloqueado: 'bloqueado', sin_traccion: 'sin tracción',
+                 cayendo: 'cayendo', atrapado: 'atrapado', volcado: 'volcado'};
+
+// '' ambar, 'rojo' o 'gris'; null si no hay nada que avisar
+function claseTerreno(t) {
+  if (t.modo === 'espejo') return 'gris';
+  if (!t.estado || t.estado === 'libre') return null;
+  if (t.estado === 'volcado') return 'rojo';
+  return ESTADOS[t.estado] ? '' : 'gris';
+}
+
+function pintarTerreno(s) {
+  const t = s.terreno, conMundo = s.mundo_v > 0 || !!t;
+  let partes = null, clase = null;
+  if (t) {
+    clase = claseTerreno(t);
+    const nombre = t.modo === 'espejo' ? 'espejo' : (ESTADOS[t.estado] || String(t.estado));
+    if (clase !== null) partes = [nombre.toUpperCase(), t.motivo, t.consejo];
+  } else if (conMundo) {
+    partes = ['terreno: sin datos'];
+    clase = 'gris';
+  }
+  const chip = $('terreno');
+  chip.hidden = !partes;
+  if (partes) {
+    const texto = partes.filter(x => x).join(' · ');
+    if (chip.textContent !== texto) chip.textContent = texto;
+    chip.className = clase;
+    colocarChip();
+  }
+
+  $('secTerreno').hidden = !conMundo;
+  if (!conMundo) return;
+  const d = t || {};
+  const n = (v, dec) => (typeof v === 'number' ? v.toFixed(dec) : '–');
+  const est = !t ? 'sin datos'
+    : (t.modo === 'espejo' ? 'espejo' : (ESTADOS[t.estado] || String(t.estado || '–'))) +
+      (t.pieza ? ' · ' + t.pieza : '');
+  const clEst = t ? claseTerreno(t) : 'gris';
+  poner('tEstado', est, clEst === 'rojo' ? 'rojo' : clEst === '' ? 'ambar' : '');
+  angulo('tCabeceo', d.cabeceo);
+  angulo('tBalanceo', d.balanceo);
+  poner('tAltura', fmt(d.altura, 3, 'm'), 'num');
+  const mg = d.margen;
+  poner('tMargen', fmt(mg, 3, 'm'), 'num' + (typeof mg !== 'number' ? '' :
+        mg < 0.03 ? ' rojo' : mg < 0.10 ? ' ambar' : ''));
+  poner('tAvance', t ? `${n(d.avance_real, 3)} / ${n(d.avance_orugas, 3)} m/s` : '–', 'num');
+  poner('tPatinado', fmt(d.patinado, 2, 'm'), 'num');
+  const v = s.verdad, p = s.pose;
+  poner('tErrOdom', v && p ? fmt(Math.hypot(v[0] - p[0], v[1] - p[1]), 3, 'm') : '–', 'num');
+}
+
+function poner(id, texto, clase) {
+  const el = $(id);
+  if (el.textContent !== texto) el.textContent = texto;
+  if (el.className !== clase) el.className = clase;
+}
+
+// En grados, ambar por encima de 25 y rojo por encima de 35
+function angulo(id, rad) {
+  if (typeof rad !== 'number') { poner(id, '–', 'num'); return; }
+  const d = rad * 180 / Math.PI, a = Math.abs(d);
+  poner(id, (d >= 0 ? '+' : '') + d.toFixed(1) + '°',
+        'num' + (a > 35 ? ' rojo' : a > 25 ? ' ambar' : ''));
+}
+
+// Sin tapar el mando: por debajo de su fila de arriba o, en estrecho, por
+// encima de sus controles
+function colocarChip() {
+  const chip = $('terreno');
+  const alto = el => { const h = el && !el.hidden ? el.offsetHeight : 0; return h ? h + 8 : 0; };
+  if (contenedor.classList.contains('estrecho')) {
+    chip.style.top = '';
+    chip.style.bottom = 10 + Math.max(alto($('mAbajo')), alto($('mLinea'))) + 'px';
+  } else {
+    chip.style.bottom = '';
+    chip.style.top = 10 + alto(document.querySelector('#mando .m-arriba')) + 'px';
+  }
 }
 
 /* ── Camara orbital ───────────────────────────────────────────────────── */
-const orbita = {az: -2.3, el: 0.55, dist: 4, centro: new THREE.Vector3(0, 0, 0.1),
-                seguir: true};
+const orbita = {az: -2.3, el: 0.55, dist: 4, centro: new THREE.Vector3(0, 0, Z_CENTRO),
+                seguir: true, vista: ''};
+// Perfil y Detras siguen el rumbo mientras estan pulsados
+const VISTAS = {perfil: {boton: 'bPerfil', az: Math.PI / 2, el: 0.12},
+                detras: {boton: 'bDetras', az: Math.PI, el: 0.35}};
 const punteros = new Map();
 let pellizco = 0;
 
 function colocarCamara() {
-  if (orbita.seguir) orbita.centro.set(visto.x, visto.y, 0.1);
+  const v = VISTAS[orbita.vista];
+  if (v) { orbita.az = visto.yaw + v.az; orbita.el = v.el; }
+  // visto.z: la z de base_link con mundo, Z_CENTRO sin el
+  if (orbita.seguir) orbita.centro.set(visto.x, visto.y, visto.z);
   const c = Math.cos(orbita.el);
   camara.position.set(
     orbita.centro.x + orbita.dist * c * Math.cos(orbita.az),
@@ -427,9 +814,18 @@ function colocarCamara() {
   camara.lookAt(orbita.centro);
 }
 
+function fijarVista(nombre) {
+  orbita.vista = nombre;
+  for (const [n, v] of Object.entries(VISTAS)) {
+    $(v.boton).setAttribute('aria-pressed', String(n === nombre));
+  }
+  if (nombre) seguir(true);
+}
+
 function seguir(si) {
   orbita.seguir = si;
   $('bSeguir').setAttribute('aria-pressed', String(si));
+  if (!si) fijarVista('');
 }
 
 function desplazar(dx, dy) {
@@ -463,6 +859,7 @@ lienzo.addEventListener('pointermove', e => {
   if (e.shiftKey || e.buttons === 2) {
     desplazar(dx, dy);
   } else {
+    fijarVista('');
     orbita.az -= dx * 0.008;
     orbita.el = Math.min(1.55, Math.max(0.05, orbita.el + dy * 0.008));
   }
@@ -476,8 +873,19 @@ lienzo.addEventListener('wheel', e => {
 }, {passive: false});
 
 $('bSeguir').onclick = () => seguir(!orbita.seguir);
-$('bCenital').onclick = () => { orbita.el = 1.55; orbita.az = -Math.PI / 2; };
-$('bRastro').onclick = () => { borrarRastro(); recorrido = 0; };
+$('bPerfil').onclick = () => fijarVista(orbita.vista === 'perfil' ? '' : 'perfil');
+$('bDetras').onclick = () => fijarVista(orbita.vista === 'detras' ? '' : 'detras');
+$('bCenital').onclick = () => { fijarVista(''); orbita.el = 1.55; orbita.az = -Math.PI / 2; };
+$('bRastro').onclick = () => { borrarRastro(rastro); borrarRastro(fantasma); recorrido = 0; };
+$('bSombras').onclick = () => {
+  sombras = !sombras;
+  $('bSombras').setAttribute('aria-pressed', String(sombras));
+  aplicarSombras();
+};
+$('bEtiquetas').onclick = () => {
+  capaEtiquetas.hidden = !capaEtiquetas.hidden;
+  $('bEtiquetas').setAttribute('aria-pressed', String(!capaEtiquetas.hidden));
+};
 
 new ResizeObserver(() => {
   const w = contenedor.clientWidth, h = contenedor.clientHeight;
@@ -496,20 +904,27 @@ function bucle(t) {
   visto.x += (objetivo.x - visto.x) * k;
   visto.y += (objetivo.y - visto.y) * k;
   visto.yaw += difAngulo(objetivo.yaw, visto.yaw) * k;
+  // Mas lenta: que la camara no pegue saltos en los cantos
+  visto.z += (objetivo.z - visto.z) * (1 - Math.exp(-dt / 0.3));
   for (const [n, q] of Object.entries(objetivo.juntas)) {
     const antes = visto.juntas[n] ?? q;
     visto.juntas[n] = antes + (q - antes) * k;
   }
 
   if (robot) {
+    // En z = 0: la altura, el cabeceo y el balanceo van en las juntas
     robot.raiz.position.set(visto.x, visto.y, 0);
     robot.raiz.rotation.set(0, 0, visto.yaw);
     for (const [n, q] of Object.entries(visto.juntas)) {
       if (robot.juntas[n]) moverJunta(robot.juntas[n], q);
     }
   }
+  sol.target.position.set(visto.x, visto.y, 0);
+  sol.position.copy(sol.target.position).add(SOL);
   colocarCamara();
   renderer.render(escena, camara);
+  colocarEtiquetas(etiquetas.mundo);
+  colocarEtiquetas(etiquetas.marcas);
   requestAnimationFrame(bucle);
 }
 

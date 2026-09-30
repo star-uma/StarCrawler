@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from starcrawler_gui import servidor
 from starcrawler_gui.mando_web import CABECERA_CLAVE, Arbitro
 from starcrawler_gui.servidor import RUTAS_POST, crear_manejador
 
@@ -202,12 +203,47 @@ def test_las_rutas_get_siguen(arrancar):
     puerto, _ = arrancar()
     c = http.client.HTTPConnection('127.0.0.1', puerto, timeout=3)
     for ruta, esperado in (('/', 200), ('/3d', 200), ('/modelo', 503),
-                           ('/nada', 404)):
+                           ('/mundo', 200), ('/nada', 404)):
         c.request('GET', ruta)
         r = c.getresponse()
         r.read()
         assert r.status == esperado, ruta
         c.close()
+
+
+def get(puerto, ruta):
+    c = http.client.HTTPConnection('127.0.0.1', puerto, timeout=3)
+    try:
+        c.request('GET', ruta)
+        r = c.getresponse()
+        return r.status, r.read(), r
+    finally:
+        c.close()
+
+
+def test_mundo_sin_datos_es_200_con_version_0(arrancar, monkeypatch):
+    """No tener mundo es lo normal: nunca 503 como /modelo."""
+    monkeypatch.setitem(servidor.MUNDO, 'json', None)
+    puerto, _ = arrancar(mando=False)
+    estado, cuerpo, r = get(puerto, '/mundo')
+    assert estado == 200
+    assert json.loads(cuerpo) == {'version': 0, 'piezas': [], 'omitidos': 0}
+    assert r.getheader('Content-Type') == 'application/json'
+    assert r.getheader('Cache-Control') == 'no-store'
+
+
+def test_mundo_con_datos_da_el_json(arrancar, monkeypatch):
+    mundo = {'version': 3, 'omitidos': 1, 'piezas': [
+        {'clave': 'terreno/0', 'tipo': 'triangulos', 'pos': [0, 0, 0],
+         'quat': [0, 0, 0, 1], 'escala': [1, 1, 1], 'color': [1, 1, 1, 1],
+         'puntos': [0, 0, 0.2, 1, 0, 0.2, 0, 1, 0.2], 'colores': None,
+         'texto': ''}]}
+    monkeypatch.setitem(servidor.MUNDO, 'json', json.dumps(mundo))
+    puerto, _ = arrancar()
+    estado, cuerpo, r = get(puerto, '/mundo')
+    assert estado == 200 and json.loads(cuerpo) == mundo
+    assert r.getheader('Cache-Control') == 'no-store'
+    assert int(r.getheader('Content-Length')) == len(cuerpo)
 
 
 def test_el_servidor_contesta_por_ipv6_y_por_ipv4():

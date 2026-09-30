@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 
 from starcrawler_common.orugas import INCLINACIONES, PRESETS_DEG
 
-from starcrawler_gui import dashboard, mando_web
+from starcrawler_gui import dashboard, mando_web, mundo_modelo
 from starcrawler_gui.vista3d import (
     MANDO_CSS,
     MANDO_HTML,
@@ -80,6 +80,91 @@ def test_los_nombres_de_junta_son_los_del_urdf():
     for nombre in ('crawler_fr_joint', 'crawler_fl_joint',
                    'crawler_rr_joint', 'crawler_rl_joint'):
         assert nombre in PAGINA_3D
+
+
+def test_ninguna_url_externa_nueva():
+    """La unica es la de three.js, y se pone al servir la pagina."""
+    assert '://' not in PAGINA_3D
+    urls = set(re.findall(r'https?://[^\s\'"]+', pagina_3d(THREE_CDN)))
+    assert urls == {THREE_CDN}
+
+
+# ─── Mundo simulado ─────────────────────────────────────────────────────────
+
+def _entre(desde, hasta):
+    m = _modulo()
+    return m[m.index(desde):m.index(hasta)]
+
+
+def test_el_mundo_se_pide_cuando_cambia_mundo_v():
+    """La geometria nunca va por /events: la pagina la pide a /mundo."""
+    m = _modulo()
+    assert "fetch('/mundo', {cache: 'no-store'})" in m
+    assert 's.mundo_v !== mundoCargado' in m
+    assert m.count('fetch(') == 2           # /modelo y /mundo
+
+
+def test_la_pose_sale_de_verdad_y_si_no_de_pose():
+    m = _modulo()
+    assert 'const real = s.verdad || s.pose;' in m
+    # el mando sigue leyendo la velocidad medida de /odom
+    assert 'o = s.pose ||' in MANDO_JS
+
+
+def test_construir_marca_entiende_los_tipos_de_mundo_modelo():
+    trozo = _entre('function construirMarca(', 'function vaciar(')
+    for tipo in mundo_modelo.TIPOS.values():
+        assert "p.tipo === '%s'" % tipo in trozo, tipo
+
+
+def test_el_terreno_solo_lee_claves_de_mundo_estado():
+    trozo = _entre('function apoya(', 'function poner(')
+    usadas = set(re.findall(r'\b[td]\.(\w+)', trozo))
+    assert {'estado', 'modo', 'apoya', 'holgura', 'cabeceo'} <= usadas
+    assert usadas <= mundo_modelo.CLAVES_ESTADO, usadas - mundo_modelo.CLAVES_ESTADO
+    assert 't.z_suelo' in _modulo()
+
+
+def test_los_estados_son_los_de_mundo_estado():
+    bloque = re.search(r'const ESTADOS = \{(.*?)\};', _modulo(), re.S).group(1)
+    assert set(re.findall(r'(\w+):', bloque)) == {
+        'libre', 'bloqueado', 'sin_traccion', 'cayendo', 'atrapado',
+        'volcado'}
+
+
+def test_los_textos_de_ros_van_con_textcontent():
+    """Etiquetas y chip: el texto viene de ROS, nunca como HTML."""
+    m = _modulo()
+    assert "document.createElement('div')" in m
+    assert 'el.textContent = p.texto;' in m
+    assert 'chip.textContent = texto;' in m
+    # la columna 'apoya' de #orugas solo pinta numeros
+    trozo = _entre('function apoya(', 'const ESTADOS')
+    assert 'motivo' not in trozo and 'consejo' not in trozo
+
+
+def test_etiquetas_y_chip_quedan_debajo_del_mando():
+    def regla(selector, css):
+        cuerpo = re.search(re.escape(selector) + r' \{([^}]*)\}', css).group(1)
+        return re.sub(r'\s+', '', cuerpo)
+    assert 'z-index:2' in regla('#mando', MANDO_CSS)
+    for selector in ('#etiquetas', '#terreno'):
+        r = regla(selector, PAGINA_3D)
+        assert 'z-index:1' in r and 'pointer-events:none' in r, selector
+    # Mismo z-index: manda el orden, y el chip no queda tapado por un rotulo
+    ids = [a.get('id') for _, a in _etiquetas(PAGINA_3D)]
+    assert ids.index('etiquetas') < ids.index('terreno') < ids.index('mando')
+
+
+def test_sombras_y_etiquetas_solo_con_mundo():
+    botones = {a['id']: a for t, a in _etiquetas(PAGINA_3D)
+               if t == 'button' and 'id' in a}
+    for nombre in ('bSombras', 'bEtiquetas'):
+        assert 'hidden' in botones[nombre]
+        assert botones[nombre]['aria-pressed'] == 'true'   # encendidas
+    for nombre in ('bPerfil', 'bDetras'):
+        assert botones[nombre]['aria-pressed'] == 'false'
+    assert 'hayMundo && sombras' in _modulo()
 
 
 # ─── Mando web ──────────────────────────────────────────────────────────────
