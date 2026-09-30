@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'starcrawler_sim'
@@ -11,6 +13,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', ['config/sim.yaml']),
+        ('share/' + package_name + '/mundos', glob('mundos/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -22,6 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'sim_node = starcrawler_sim.sim_node:main',
+            'mundo_node = starcrawler_sim.mundo_node:main',
+            'mundo_check = starcrawler_sim.mundo_check:main',
         ],
     },
 )

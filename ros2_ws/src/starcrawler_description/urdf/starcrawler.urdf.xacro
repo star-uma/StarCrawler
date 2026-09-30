@@ -90,14 +90,15 @@
   <!-- base_footprint: proyeccion en el suelo, raiz para Nav2 -->
   <link name="base_footprint"/>
 
-  <!-- Juntas virtuales del apoyo: las publica chasis_node. La altura se
+  <!-- Juntas virtuales del apoyo: las publica chasis_node, o mundo_node con
+       un mundo cargado (entonces la altura es la del terreno). La altura se
        mide desde la de las orugas en llano, para que cero sea reposo. -->
   <joint name="chassis_lift_joint" type="prismatic">
     <parent link="base_footprint"/>
     <child link="chassis_lift_link"/>
     <origin xyz="0 0 ${pivot_height}"/>
     <axis xyz="0 0 1"/>
-    <limit lower="0.0" upper="${arm_length + tip_radius}" effort="0" velocity="1"/>
+    <limit lower="-0.6" upper="2.0" effort="0" velocity="1"/>
   </joint>
   <link name="chassis_lift_link"/>
 

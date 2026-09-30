@@ -20,6 +20,8 @@ Uso:
     ros2 launch starcrawler_bringup robot.launch.py simulate:=true rviz:=true
     ros2 launch starcrawler_bringup robot.launch.py micro_ros:=false   # firmware serie
     ros2 launch starcrawler_bringup robot.launch.py sim:=true gui_mando:=true  # conducir desde la web
+    ros2 launch starcrawler_bringup robot.launch.py sim:=true mundo:=escalon rviz:=true gui:=true
+    ros2 launch starcrawler_bringup robot.launch.py port:=/dev/ttyUSB0 mundo:=rampa  # HW_SIMULADO
 """
 import os
 
@@ -43,6 +45,15 @@ def topes_del_mando():
         p = yaml.safe_load(f)['starcrawler_teleop']['ros__parameters']
     return {k: float(p[k])
             for k in ('max_lineal', 'max_angular', 'factor_lento', 's_preset')}
+
+
+def geometria_de_la_odometria():
+    """Radio y separacion de odometry.yaml, para que el mundo integre igual."""
+    ruta = os.path.join(get_package_share_directory('starcrawler_odometry'),
+                        'config', 'odometry.yaml')
+    with open(ruta, encoding='utf-8') as f:
+        p = yaml.safe_load(f)['starcrawler_odometry']['ros__parameters']
+    return {k: float(p[k]) for k in ('wheel_radius', 'track_separation')}
 
 
 def generate_launch_description():
@@ -99,6 +110,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'joy_device', default_value='0',
             description='Indice del mando para el nodo joy'),
+        DeclareLaunchArgument(
+            'mundo', default_value='',
+            description='Mundo con obstaculos para el robot simulado: nombre '
+                        'en starcrawler_sim/mundos o ruta a un .yaml. Vacio = '
+                        'como hasta ahora'),
     ]
 
     simulate = LaunchConfiguration('simulate')
@@ -107,7 +123,12 @@ def generate_launch_description():
     micro_ros = LaunchConfiguration('micro_ros')
     teleop = LaunchConfiguration('teleop')
     gui_mando = LaunchConfiguration('gui_mando')
+    mundo = LaunchConfiguration('mundo')
     mux_yaml = PathJoinSubstitution([teleop_share, 'config', 'mux.yaml'])
+
+    # Con mundo, mundo_node publica la pose verdadera (TF y juntas del chasis)
+    con_mundo = PythonExpression(["'", mundo, "' != ''"])
+    sin_mundo = PythonExpression(["'", mundo, "' == ''"])
 
     # Los muxes hacen falta con cualquier fuente de consignas. Como
     # IfCondition, 'true', 'True' y '1' valen lo mismo
@@ -177,23 +198,38 @@ def generate_launch_description():
             output='screen',
         ),
         # Odometria de orugas. Separada del driver: se prueba y se
-        # sustituye sin tocarlo (ver starcrawler_odometry).
+        # sustituye sin tocarlo (ver starcrawler_odometry). Con mundo sigue
+        # publicando /odom, pero la TF la da mundo_node.
         Node(
             package='starcrawler_odometry',
             executable='odometry_node',
             name='starcrawler_odometry',
             condition=IfCondition(LaunchConfiguration('odom')),
-            parameters=[PathJoinSubstitution(
-                [odometria_share, 'config', 'odometry.yaml'])],
+            parameters=[
+                PathJoinSubstitution([odometria_share, 'config', 'odometry.yaml']),
+                {'publish_tf': ParameterValue(sin_mundo, value_type=bool)},
+            ],
             output='screen',
         ),
         # El chasis sobre sus orugas: juntas virtuales de altura, cabeceo
         # y balanceo a partir de las elevaciones. Sin el, base_link no
-        # tiene TF: va siempre.
+        # tiene TF: va siempre, salvo con mundo, que publica las mismas.
         Node(
             package='starcrawler_odometry',
             executable='chasis_node',
             name='starcrawler_chasis',
+            condition=IfCondition(sin_mundo),
+            output='screen',
+        ),
+        # El robot en un mundo con obstaculos: observa /starcrawler/state y
+        # publica la pose verdadera sobre el terreno (ver starcrawler_sim)
+        Node(
+            package='starcrawler_sim',
+            executable='mundo_node',
+            name='starcrawler_mundo',
+            condition=IfCondition(con_mundo),
+            parameters=[{'mundo': ParameterValue(mundo, value_type=str),
+                         **geometria_de_la_odometria()}],
             output='screen',
         ),
         Node(
@@ -273,12 +309,14 @@ def generate_launch_description():
         ),
         # Marco fijo odom: el robot se desplaza por la rejilla. El
         # starcrawler.rviz fija base_footprint y sirve para view_model.
+        # Con mundo, mundo.rviz anade el terreno, el apoyo y la verdad.
         Node(
             package='rviz2',
             executable='rviz2',
             condition=IfCondition(LaunchConfiguration('rviz')),
-            arguments=['-d', PathJoinSubstitution(
-                [descripcion, 'rviz', 'plano.rviz'])],
+            arguments=['-d', PathJoinSubstitution([
+                descripcion, 'rviz', PythonExpression([
+                    "'mundo.rviz' if '", mundo, "' != '' else 'plano.rviz'"])])],
         ),
     ]
 

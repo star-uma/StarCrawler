@@ -7,6 +7,7 @@
     Robot simulado a nivel de topicos: habla los mismos que hablara el
     ESP32 con micro-ROS, asi que el resto del grafo no distingue si esta
     el robot o esto. Permite desarrollar y probar sin hardware.
+    mundo_node lo apoya en un mundo con obstaculos (mundos/*.yaml).
   </description>
   <maintainer email="mariogj.03@uma.es">Mario Garcia Jimenez</maintainer>
   <license>MIT</license>
@@ -16,6 +17,15 @@
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>starcrawler_msgs</depend>
+  <!-- mundo_node -->
+  <depend>starcrawler_odometry</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

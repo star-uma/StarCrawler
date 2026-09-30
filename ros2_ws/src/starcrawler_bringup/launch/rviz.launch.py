@@ -6,9 +6,12 @@ tocar hardware. El PC de a bordo publica /joint_states por la red DDS.
 
     export ROS_DOMAIN_ID=<el mismo que el robot>
     ros2 launch starcrawler_bringup rviz.launch.py
+    ros2 launch starcrawler_bringup rviz.launch.py mundo:=true   # robot en un mundo
 """
 from launch import LaunchDescription
-from launch.substitutions import Command, PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import (Command, LaunchConfiguration,
+                                  PathJoinSubstitution, PythonExpression)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -23,6 +26,10 @@ def generate_launch_description():
         value_type=str)
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'mundo', default_value='false',
+            description='El robot corre con mundo:= en robot.launch.py: abre '
+                        'mundo.rviz, con el terreno y el apoyo'),
         Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
@@ -32,7 +39,9 @@ def generate_launch_description():
         Node(
             package='rviz2',
             executable='rviz2',
-            arguments=['-d', PathJoinSubstitution(
-                [descripcion, 'rviz', 'plano.rviz'])],
+            arguments=['-d', PathJoinSubstitution([
+                descripcion, 'rviz', PythonExpression([
+                    "'mundo.rviz' if '", LaunchConfiguration('mundo'),
+                    "'.lower() in ('true', '1') else 'plano.rviz'"])])],
         ),
     ])
