@@ -1,0 +1,199 @@
+# practica_rrl.yaml — arena de practica para StarCrawler, estilo RoboCup Rescue
+# ============================================================================
+# 8 x 6 m. Cuatro carriles de 1,2 m en zigzag (el "Zig-Zag Lane" de las reglas
+# RRL 2023/2024) con dificultad creciente, mas una zona libre de escalones
+# sueltos. Colores: gris segun la altura; cada elemento o carril admite
+# color: [r, g, b].
+#
+# 6,0 +-------------------------------------------------------+
+#     | libre  ->  5 · escalones sueltos 15/30/40 cm          |
+# 4,8 |          +--------------------------------------------+
+#     | meta     : <-  4 · campos de escalones     :          |
+# 3,6 +--------------------------------------------+    C     |
+#     |  B       : ->  3 · K-rails y escalera      :          |
+# 2,4 |          +--------------------------------------------+
+#     |  B       : <-  2 · escalones y valla       :          |
+# 1,2 +--------------------------------------------+    A     |
+#     |salida    : ->  1 · bordillo y rampas       :          |
+#   0 +-------------------------------------------------------+
+#     0          1,6                              6,4        8   x (m)
+#
+# Recorrido: salida -> carril 1 -> A -> carril 2 -> B -> carril 3 -> C ->
+# carril 4 -> meta, unos 26 m. El carril 5 va aparte.
+#
+# Formato 1. Metros y grados. Mundo 2,5D (z = f(x, y)): sin voladizos, tubos
+# ni zanjas. Cada elemento se coloca por "pos: [s, t]" en el marco de su
+# carril: s a lo largo (sentido de avance), t lateral (+ = izquierda del
+# robot). "pos" es el centro del borde de ENTRADA y el elemento se extiende
+# en +s; "pos: [sigue, t]" empieza donde acaba el anterior. Sin "ancho", el
+# elemento ocupa todo el carril. Las vigas van de "de" a "a".
+#
+# Fuentes: [C] = cota citada; [D] = derivada aqui.
+# - RRL: reglas de la RoboCup Rescue Robot League 2019 (v2.4), 2023, 2025F y
+#   2026D, y las Qualifications de 2022.
+# - Jacoff et al. 2008: los campos de escalones (stepfields) de NIST.
+# - NIST: pagina de test methods; ASTM E2804, E2826, E2827 y E2828 (de pago:
+#   sus plantillas exactas no estan aqui).
+# - OARKit: las vallas del RMRC.
+# - Athena: robot de RoboCup 2025, del tamano de StarCrawler.
+# No hay planos propios de la German Open: las cotas son las comunes de las
+# reglas RRL y de NIST.
+
+formato: 1
+nombre: practica_rrl
+descripcion: Pista RRL de dificultad creciente para ensayar subir y bajar con los brazos
+limites: [[0.0, 0.0], [8.0, 6.0]]
+
+# Pose del robot al arrancar, en el centro de la salida: es el origen de odom
+inicio: {x: 0.80, y: 0.60, rumbo: 0}
+
+# Tabiques de 2 cm y 0,8 m de alto [D]. Para el contacto son paredes; en las
+# vistas, translucidos
+paredes:
+  - {puntos: [[0, 0], [8, 0], [8, 6], [0, 6], [0, 0]], alto: 0.8, grosor: 0.02}
+  - {puntos: [[0.0, 1.2], [6.4, 1.2]], alto: 0.8, grosor: 0.02}
+  - {puntos: [[1.6, 2.4], [8.0, 2.4]], alto: 0.8, grosor: 0.02}
+  - {puntos: [[0.0, 3.6], [6.4, 3.6]], alto: 0.8, grosor: 0.02}
+  - {puntos: [[1.6, 4.8], [8.0, 4.8]], alto: 0.8, grosor: 0.02}
+
+# Solo pintura en el suelo y rotulo. La salida de las reglas es de 1,2 x 1,2 m
+# [C, RRL 2023]; aqui, 1,6 x 1,2. El robot gira sobre si mismo en un circulo
+# de 1,51 m con los brazos en llano (cabe en las bahias, de 1,6 x 2,4) y de
+# 0,94 m con los brazos a +90, que es lo que piden la salida, la meta y los
+# carriles [D]
+zonas:
+  - {nombre: salida,  de: [0.0, 0.0], a: [1.6, 1.2]}
+  - {nombre: bahia_A, de: [6.4, 0.0], a: [8.0, 2.4]}
+  - {nombre: bahia_B, de: [0.0, 1.2], a: [1.6, 3.6]}
+  - {nombre: bahia_C, de: [6.4, 2.4], a: [8.0, 4.8]}
+  - {nombre: meta,    de: [0.0, 3.6], a: [1.6, 4.8]}
+
+# Bahias de 7,2 m de largo y al menos 1,1 m de ancho (1,2 hasta 2018) [C, RRL
+# 2019]; los aparatos se hacen con tableros de 120 x 120 y 120 x 240 cm [C,
+# Qualifications 2022]. Aqui, carriles de 1,2 x 4,8 m [D]
+carriles:
+  # -- 1: primeros cantos y pendientes -----------------------------------------
+  - nombre: carril_1
+    titulo: "1. Bordillo 10 cm, rampa 15 grados y rampas cruzadas"
+    origen: [1.6, 0.6]
+    rumbo: 0
+    largo: 4.8
+    ancho: 1.2
+    elementos:
+      # Curb: barra de 10 x 10 cm en el suelo [C, RRL 2019 MAN 6]. Con los
+      # brazos en llano la panza va a 2,6 cm [D, URDF]: hay que bajar los
+      # cuatro brazos o se queda colgado
+      - {tipo: viga, de: [0.45, 0.6], a: [0.45, -0.6], seccion: 0.10, alto: 0.10}
+      # Pendientes de 15 grados [C, NIST y RRL 2023-2026D]. Tramos de 60 cm
+      # [D, de las "60 cm ramps" de RRL 2019]: sube 16 cm, meseta y baja
+      - {tipo: rampa, pos: [1.1, 0], alto: 0.16, pendiente: 15}
+      - {tipo: caja, pos: [sigue, 0], largo: 0.6, alto: 0.16}
+      - {tipo: rampa, pos: [sigue, 0], z: 0.16, alto: -0.16, pendiente: 15}
+      # Rampas cruzadas de 15 grados [C, ASTM E2827, NIST y RRL]; celdas de
+      # 0,6 m, 16,1 cm de alto [D]. En 2026 llevan discos deslizantes [C, RRL
+      # 2026D]: aqui no hay rozamiento por material
+      - {tipo: campo_rampas, pos: [3.3, 0], celda: 0.6, pendiente: 15,
+         patron: cruzadas, filas: 2, columnas: 2}
+
+  # -- 2: escalones y valla ------------------------------------------------------
+  - nombre: carril_2
+    titulo: "2. Escalones de 10 y 20 cm, valla 20 + 20"
+    origen: [6.4, 1.8]
+    rumbo: 180
+    largo: 4.8
+    ancho: 1.2
+    elementos:
+      # Plataforma de 10 cm de la prueba de flippers autonomos [C, RRL 2019]
+      - {tipo: caja, pos: [0.4, 0], largo: 1.0, alto: 0.10}
+      # "Pallets & Pipes": escalones de 20 cm [C, RRL 2023-2026D]
+      - {tipo: caja, pos: [2.0, 0], largo: 1.0, alto: 0.20}
+      # Valla (hurdles): en el RMRC, tubos de 50 mm que giran libres, +5, +5 y
+      # -10 cm [C, OARKit]; a escala 4:1, +20, +20 y -40 cm [D]. RRL 2019 cita
+      # "a 20 cm tall rolling pipe obstacle" [C]. El formato 1 no tiene tubos:
+      # los cantos son de caja, y el de 40 cm es la bajada
+      - {tipo: caja, pos: [3.4, 0], largo: 0.6, alto: 0.20}
+      - {tipo: caja, pos: [sigue, 0], largo: 0.6, alto: 0.40}
+
+  # -- 3: K-rails y escalera con rellano -----------------------------------------
+  - nombre: carril_3
+    titulo: "3. K-rails 10 y 20 cm, escalera 35 grados arriba y 45 abajo"
+    origen: [1.6, 3.0]
+    rumbo: 0
+    largo: 4.8
+    ancho: 1.2
+    elementos:
+      # "Diagonal K-Rails: 10|20 cm trip obstacles" [C, RRL 2026D]: vigas de
+      # 10 x 10 cm a 45 grados, de unos 161,5 cm, sobre tableros de 120 x 240
+      # en pendiente de 15 [C, Qualifications 2022]. Aqui en llano: el formato 1
+      # no apoya unas piezas en otras
+      - {tipo: viga, de: [0.3, 0.6], a: [1.5, -0.6], seccion: 0.10, alto: 0.10}
+      - {tipo: viga, de: [0.9, 0.6], a: [2.1, -0.6], seccion: 0.10, alto: 0.20}
+      # Escaleras de 35, 40 y 45 grados [C, RRL 2023-2026D] con contrahuellas
+      # de 20 cm [C, RRL 2026D]. Huellas de 0,20 / tan 35 = 0,286 y 0,20 /
+      # tan 45 = 0,200 [D]; rellano de 0,8 m a 0,60 [D]
+      - tipo: escalera
+        pos: [2.5, 0]
+        peldanos: 3
+        contrahuella: 0.20
+        pendiente: 35
+        rellano: 0.8
+        bajada: {pendiente: 45}
+
+  # -- 4: campos de escalones ----------------------------------------------------
+  - nombre: carril_4
+    titulo: "4. Campo medio cubico y campo cubico en colina diagonal"
+    origen: [6.4, 4.2]
+    rumbo: 180
+    largo: 4.8
+    ancho: 1.2
+    elementos:
+      # Pale mediano de 120 cm con rejilla de 10 x 10 postes de 10 cm y
+      # alturas de 10/20/30/40 cm; "half-cubic" es la misma configuracion a
+      # media altura; los planos llevan 4 postes de 3 unidades [C, Jacoff et al.
+      # 2008]. RRL 2026D cita "Half-Cubic Stepfields: 15 cm step heights" [C].
+      # Aqui, 12 x 12 postes de 10 cm con 5 cm por unidad [D]. Los patrones
+      # estan inspirados en ASTM E2828; no son la norma
+      - {tipo: campo_escalones, pos: [0.3, 0], celda: 0.10, unidad: 0.05,
+         patron: plano_cruz, filas: 12, columnas: 12}
+      # Cubico: unidad = poste = 10 cm; cresta de 4 unidades en la diagonal con
+      # filas de 2-3 unidades a los lados [C, Jacoff et al. 2008]. Regla 1:
+      # nunca mas de 2 unidades entre vecinas [C]; aqui nunca mas de 1 [D]. La
+      # huella del robot no debe pasar de 1/4-1/3 del pale [C, Jacoff]: con los
+      # brazos arriba (0,42 m2) ocupa 0,29 de este [D]
+      - tipo: campo_escalones
+        pos: [1.9, 0]
+        celda: 0.10
+        unidad: 0.10
+        # fila = a lo largo desde la entrada; columna = de izquierda a derecha
+        alturas:
+          - [4, 3, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1]
+          - [3, 4, 3, 3, 2, 2, 1, 1, 1, 1, 1, 1]
+          - [3, 3, 4, 3, 3, 2, 2, 1, 1, 1, 1, 1]
+          - [2, 3, 3, 4, 3, 3, 2, 2, 1, 1, 1, 1]
+          - [2, 2, 3, 3, 4, 3, 3, 2, 2, 1, 1, 1]
+          - [1, 2, 2, 3, 3, 4, 3, 3, 2, 2, 1, 1]
+          - [1, 1, 2, 2, 3, 3, 4, 3, 3, 2, 2, 1]
+          - [1, 1, 1, 2, 2, 3, 3, 4, 3, 3, 2, 2]
+          - [1, 1, 1, 1, 2, 2, 3, 3, 4, 3, 3, 2]
+          - [1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 3, 3]
+          - [1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 3]
+          - [1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4]
+      # El prototipo tenia aqui una zanja de 30 cm (NIST Gap: huecos de 10 a
+      # 100 cm [C]); el formato 1 no tiene zanjas
+
+  # -- 5: zona libre, el escalon maximo ------------------------------------------
+  - nombre: carril_5
+    titulo: "5. Escalones sueltos de 15, 30 y 40 cm"
+    origen: [1.6, 5.4]
+    rumbo: 0
+    largo: 6.4
+    ancho: 1.2
+    elementos:
+      # Escalones de 20 cm [C, RRL 2023-2026D] y de 30 en "Dwelling Access"
+      # [C, RRL 2026D]; el de 15 cm es intermedio [D]
+      - {tipo: caja, pos: [0.4, 0], largo: 0.6, alto: 0.15}
+      - {tipo: caja, pos: [2.2, 0], largo: 0.6, alto: 0.30}
+      # Athena (0,7 x 0,5 m) sube pales de 41 cm [C, RoboCup 2025]. Para
+      # StarCrawler 0,40 es el limite: el primer contacto llega como mucho a
+      # 0,4017 m, con los brazos a 69,4 grados [D]. Casi seguro no sube
+      - {tipo: caja, pos: [4.0, 0], largo: 0.6, alto: 0.40}

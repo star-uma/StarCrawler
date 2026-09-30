@@ -1,0 +1,12 @@
+# rampa.yaml — subida de 15 grados, meseta y bajada de 30
+# Sube hasta 0,20 m desde x = 1,0 (largo 0,20 / tan 15 = 0,746), meseta de
+# 0,8 m y bajada de 30 grados (largo 0,346): vuelve al suelo en x = 2,892.
+formato: 1
+nombre: rampa
+descripcion: Rampa de 15 grados hasta 20 cm, meseta de 0,8 m y bajada de 30 grados
+inicio: {x: 0.0, y: 0.0, rumbo: 0}
+
+elementos:
+  - {tipo: rampa, pos: [1.0, 0], ancho: 1.2, alto: 0.20, pendiente: 15}
+  - {tipo: caja, pos: [sigue, 0], ancho: 1.2, largo: 0.8, alto: 0.20}
+  - {tipo: rampa, pos: [sigue, 0], ancho: 1.2, z: 0.20, alto: -0.20, pendiente: 30}

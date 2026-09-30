@@ -1,0 +1,10 @@
+# escalon.yaml — un escalon de 20 cm
+# La cara de entrada queda en x = 1,0 de odom: se sube, se recorre la
+# plataforma de 1 m y se baja 20 cm en x = 2,0.
+formato: 1
+nombre: escalon
+descripcion: Escalon de 20 cm de alto, 1 m de largo y 1,2 m de ancho
+inicio: {x: 0.0, y: 0.0, rumbo: 0}
+
+elementos:
+  - {tipo: caja, pos: [1.0, 0], largo: 1.0, alto: 0.20, ancho: 1.2}

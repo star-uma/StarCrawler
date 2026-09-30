@@ -1,0 +1,7 @@
+# llano.yaml — suelo llano sin nada
+# Para la prueba de identidad: con este mundo el robot tiene que moverse
+# igual que sin mundo (misma pose que /odom y que chasis_node en llano).
+formato: 1
+nombre: llano
+descripcion: Suelo llano sin obstaculos
+inicio: {x: 0.0, y: 0.0, rumbo: 0}

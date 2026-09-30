@@ -1,0 +1,12 @@
+# escalera.yaml — escalera de 20 cm con rellano y bajada
+# Cuatro contrahuellas de 0,20 hasta el rellano, huella de 0,25 (38,7 grados).
+# Peldanos a 0,20 / 0,40 / 0,60 desde x = 1,2; rellano de 1 m a 0,80 (de
+# x = 1,95 a 2,95) y bajada en espejo: 0,60 / 0,40 / 0,20 y suelo en x = 3,70.
+formato: 1
+nombre: escalera
+descripcion: Escalera de 4 contrahuellas de 20 cm, rellano a 0,80 m y bajada
+inicio: {x: 0.0, y: 0.0, rumbo: 0}
+
+elementos:
+  - {tipo: escalera, pos: [1.2, 0], ancho: 1.2, peldanos: 4, contrahuella: 0.20,
+     huella: 0.25, rellano: 1.0, bajada: {huella: 0.25}}
