@@ -99,6 +99,10 @@ def leer_urdf(xml: str) -> Dict:
             'eje': _floats(eje.get('xyz') if eje is not None else None,
                            [1.0, 0.0, 0.0]),
         })
+        # Tacos de las orugas: la pagina los mueve sola, modulo su periodo
+        limite = j.find('limit')
+        if '_tacos_' in j.get('name', '') and limite is not None:
+            joints[-1]['periodo'] = float(limite.get('upper', 0))
 
     raices = [n for n in links if n not in hijos]
     if len(raices) != 1:

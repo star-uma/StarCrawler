@@ -339,7 +339,7 @@ function construir(m) {
     marco.add(movil);
     movil.add(links[j.hijo]);
     links[j.padre].add(marco);
-    juntas[j.nombre] = {tipo: j.tipo, movil, hijo: links[j.hijo],
+    juntas[j.nombre] = {tipo: j.tipo, movil, hijo: links[j.hijo], periodo: j.periodo,
                         eje: new THREE.Vector3().fromArray(j.eje).normalize()};
   }
   return {raiz: links[m.raiz], juntas};
@@ -617,6 +617,13 @@ function colocarEtiquetas(lista) {
 const Z_CENTRO = 0.1;                      // altura de la camara sin mundo
 const objetivo = {x: 0, y: 0, yaw: 0, z: Z_CENTRO, juntas: {}};
 const visto = {x: 0, y: 0, yaw: 0, z: Z_CENTRO, juntas: {}};
+// Tacos de las orugas: la pagina integra la velocidad de banda en cada
+// cuadro. Los de /joint_states (para RViz) van en diente de sierra y a
+// 10 Hz el suavizado los haria ir y venir.
+const BANDAS = [['crawler_fr', false], ['crawler_fl', true],
+                ['crawler_rr', false], ['crawler_rl', true]];
+const TACOS = ['arriba', 'abajo', 'polea', 'punta'];
+const bandas = {vl: 0, vr: 0, t: 0, fase: [0, 0, 0, 0]};
 const odomVista = {x: 0, y: 0};
 let hayPose = false, recorrido = 0;
 
@@ -655,7 +662,14 @@ window.estadoRobot.addEventListener('message', ev => {
     Object.assign(odomVista, {x, y});
     anadirRastro(fantasma, x, y, zSuelo + 0.006);
   }
-  if (s.joints) Object.assign(objetivo.juntas, s.joints);
+  if (s.joints) {
+    for (const [n, q] of Object.entries(s.joints)) {
+      if (!n.includes('_tacos_')) objetivo.juntas[n] = q;
+    }
+  }
+  if (typeof s.vl === 'number' && typeof s.vr === 'number') {
+    Object.assign(bandas, {vl: s.vl, vr: s.vr, t: performance.now()});
+  }
   if (typeof s.mundo_v === 'number' && s.mundo_v !== mundoCargado && !pidiendoMundo &&
       performance.now() - tFalloMundo > 2000) {
     cargarMundo();
@@ -918,6 +932,20 @@ function bucle(t) {
     for (const [n, q] of Object.entries(visto.juntas)) {
       if (robot.juntas[n]) moverJunta(robot.juntas[n], q);
     }
+    // Fase en pasos de taco: el arco de la polea activa tiene un taco por
+    // periodo, asi que w / periodo son pasos por segundo
+    const fresca = t - bandas.t < 500;
+    BANDAS.forEach(([b, izq], i) => {
+      const polea = robot.juntas[b + '_tacos_polea_joint'];
+      if (!polea || !polea.periodo) return;
+      const dps = fresca ? (izq ? bandas.vl : bandas.vr) : 0;
+      bandas.fase[i] += dps * Math.PI / 180 * dt / polea.periodo;
+      bandas.fase[i] -= Math.floor(bandas.fase[i]);
+      for (const lado of TACOS) {
+        const j = robot.juntas[b + '_tacos_' + lado + '_joint'];
+        if (j && j.periodo) moverJunta(j, bandas.fase[i] * j.periodo);
+      }
+    });
   }
   sol.target.position.set(visto.x, visto.y, 0);
   sol.position.copy(sol.target.position).add(SOL);
