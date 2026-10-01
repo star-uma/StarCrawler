@@ -199,20 +199,72 @@
     </link>
   </xacro:macro>
 
-  <!-- Tacos de la banda, n por tramo (recursivo). side = +1 arriba, -1 abajo -->
-  <xacro:macro name="tacos" params="n x_sign side">
+  <!-- Tacos que se mueven. Como van equiespaciados, basta desplazarlos lo
+       que avanza la banda modulo un paso de taco: cada tramo es una junta
+       prismatica (0..paso) y cada arco alrededor de una polea, una de giro
+       (0..paso angular). Las publica bandas_node; el limite superior de
+       cada junta es su periodo. -->
+  <xacro:property name="lug_pitch" value="${belt_length/lug_count}"/>
+
+  <!-- n tacos a lo largo de un tramo, en el marco del tramo -->
+  <xacro:macro name="tacos_tramo" params="n side">
     <xacro:if value="${n > 0}">
-      <xacro:property name="ang" value="${side*x_sign*belt_angle}"/>
-      <xacro:property name="u" value="${(n - 0.5)/lug_count*belt_length - belt_length/2}"/>
-      <xacro:property name="off" value="${belt_thickness/2 + lug_height/2}"/>
       <visual>
-        <origin xyz="${x_sign*belt_x + u*cos(ang) + side*off*sin(ang)} 0 ${side*belt_z - u*sin(ang) + side*off*cos(ang)}"
-                rpy="0 ${ang} 0"/>
+        <origin xyz="${(n - 0.5)*lug_pitch - belt_length/2} 0 ${side*(belt_thickness/2 + lug_height/2)}"/>
         <geometry><box size="${lug_length} ${arm_width} ${lug_height}"/></geometry>
         <material name="sc_goma"/>
       </visual>
-      <xacro:tacos n="${n-1}" x_sign="${x_sign}" side="${side}"/>
+      <xacro:tacos_tramo n="${n-1}" side="${side}"/>
     </xacro:if>
+  </xacro:macro>
+
+  <!-- Tacos del arco de una polea (los de la mitad por donde abraza la
+       banda). extremo = -1 polea activa, +1 polea de la punta -->
+  <xacro:macro name="tacos_arco" params="k n r x_sign extremo">
+    <xacro:if value="${n - k > 0}">
+      <xacro:property name="th" value="${2*pi*k/n}"/>
+      <xacro:if value="${extremo*(x_sign*cos(th) - sin(belt_angle)) >= 0}">
+        <visual>
+          <origin xyz="${(r + lug_height/2)*cos(th)} 0 ${(r + lug_height/2)*sin(th)}"
+                  rpy="0 ${pi/2 - th} 0"/>
+          <geometry><box size="${lug_length} ${arm_width} ${lug_height}"/></geometry>
+          <material name="sc_goma"/>
+        </visual>
+      </xacro:if>
+      <xacro:tacos_arco k="${k+1}" n="${n}" r="${r}" x_sign="${x_sign}" extremo="${extremo}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="banda_movil" params="name x_sign">
+    <xacro:macro name="tramo" params="lado side">
+      <joint name="${name}_tacos_${lado}_joint" type="prismatic">
+        <parent link="${name}_link"/>
+        <child link="${name}_tacos_${lado}"/>
+        <origin xyz="${x_sign*belt_x} 0 ${side*belt_z}" rpy="0 ${side*x_sign*belt_angle} 0"/>
+        <axis xyz="${side} 0 0"/>
+        <limit lower="0" upper="${lug_pitch}" effort="0" velocity="1"/>
+      </joint>
+      <link name="${name}_tacos_${lado}">
+        <xacro:tacos_tramo n="${lug_count}" side="${side}"/>
+      </link>
+    </xacro:macro>
+    <xacro:tramo lado="arriba" side="1"/>
+    <xacro:tramo lado="abajo" side="-1"/>
+    <xacro:macro name="arco" params="lado x r extremo">
+      <xacro:property name="n" value="${int(2*pi*r/lug_pitch + 0.5)}"/>
+      <joint name="${name}_tacos_${lado}_joint" type="revolute">
+        <parent link="${name}_link"/>
+        <child link="${name}_tacos_${lado}"/>
+        <origin xyz="${x} 0 0"/>
+        <axis xyz="0 1 0"/>
+        <limit lower="0" upper="${2*pi/n}" effort="0" velocity="10"/>
+      </joint>
+      <link name="${name}_tacos_${lado}">
+        <xacro:tacos_arco k="0" n="${n}" r="${r}" x_sign="${x_sign}" extremo="${extremo}"/>
+      </link>
+    </xacro:macro>
+    <xacro:arco lado="polea" x="0" r="${pulley_radius}" extremo="-1"/>
+    <xacro:arco lado="punta" x="${x_sign*arm_length}" r="${tip_radius}" extremo="1"/>
   </xacro:macro>
 
   <xacro:macro name="chapa" params="x_sign lado">
@@ -233,16 +285,15 @@
     </visual>
   </xacro:macro>
 
-  <!-- Chapas amarillas, tacos, tensor y tapacubos de cada oruga, en un link
+  <!-- Chapas amarillas, tensor y tapacubos de cada oruga, en un link
        fijo: chasis_node y el contacto solo leen los cilindros del brazo -->
   <xacro:macro name="crawler_deco" params="name x_sign y_sign material">
     <joint name="${name}_deco_joint" type="fixed">
       <parent link="${name}_link"/>
       <child link="${name}_deco"/>
     </joint>
+    <xacro:banda_movil name="${name}" x_sign="${x_sign}"/>
     <link name="${name}_deco">
-      <xacro:tacos n="${lug_count}" x_sign="${x_sign}" side="1"/>
-      <xacro:tacos n="${lug_count}" x_sign="${x_sign}" side="-1"/>
       <xacro:chapa x_sign="${x_sign}" lado="1"/>
       <xacro:chapa x_sign="${x_sign}" lado="-1"/>
       <visual>

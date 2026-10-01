@@ -4,6 +4,7 @@ robot.launch.py — arranque completo de StarCrawler
 Levanta todo lo que corre en el PC de a bordo:
 
     robot_state_publisher  (URDF -> TF, dibuja el robot)
+    starcrawler_bandas     (los tacos de las orugas giran con la banda)
     starcrawler_chasis     (el chasis apoyado en sus orugas)
     micro_ros_agent        (el ESP32 es un nodo ROS 2, como en Donatello)
     joy + starcrawler_teleop  (mando conectado al PC)
@@ -168,6 +169,14 @@ def generate_launch_description():
             package='robot_state_publisher',
             executable='robot_state_publisher',
             parameters=[{'robot_description': robot_description}],
+            output='screen',
+        ),
+        # Los tacos de las orugas se mueven con la velocidad de las bandas
+        Node(
+            package='starcrawler_odometry',
+            executable='bandas_node',
+            name='starcrawler_bandas',
+            parameters=[{'wheel_radius': geometria_de_la_odometria()['wheel_radius']}],
             output='screen',
         ),
         # El driver habla con el ESP32 del firmware serie (o con su

@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'odometry_node = starcrawler_odometry.odometry_node:main',
             'chasis_node = starcrawler_odometry.chasis_node:main',
+            'bandas_node = starcrawler_odometry.bandas_node:main',
         ],
     },
 )
