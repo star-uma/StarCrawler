@@ -113,11 +113,15 @@ def construir_mjcf(geo: GeometriaRobot, mundo, par: ParFisica = ParFisica()) -> 
             '<body name="b_%s" pos="%s">'
             '<joint name="b_%s" type="hinge" axis="0 %g 0" range="-3.1 3.1" '
             'limited="false" damping="%g" armature="0.5"/>'
-            '<geom type="box" size="%.5g %.5g %.5g" pos="%.5g 0 0" mass="%.5g" '
-            'contype="0" conaffinity="0" group="3"/>%s</body>'
+            '%s%s</body>'
             % (NOMBRES[i], _n((px, py, 0.0)), NOMBRES[i], -s,
-               par.amortiguacion_brazo, o.largo / 2, media, o.radio_punta,
-               s * o.largo / 2, max(geo.masa_brazo - par.masa_ruedas, 0.1),
+               par.amortiguacion_brazo,
+               ''.join('<geom type="box" size="%.5g 0.003 %.5g" pos="%.5g %.5g 0" '
+                       'mass="%.5g" contype="0" conaffinity="0" rgba="1 0.82 0 1"/>'
+                       % (o.largo / 2, 0.9 * o.radio_punta, s * o.largo / 2,
+                          lado * (media + 0.003),
+                          max(geo.masa_brazo - par.masa_ruedas, 0.1) / 2)
+                       for lado in (1, -1)),
                ''.join(cuerpos)))
 
     actuadores = []

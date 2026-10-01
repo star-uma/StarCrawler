@@ -47,6 +47,13 @@
   <xacro:property name="arm_width"    value="0.08"/>
   <xacro:property name="arm_mass"     value="3.0"/>
   <xacro:property name="belt_thickness" value="0.012"/>
+  <!-- Aspecto (solo visual): tacos de la banda y chapas laterales -->
+  <xacro:property name="lug_count"  value="12"/>
+  <xacro:property name="lug_length" value="0.012"/>
+  <xacro:property name="lug_height" value="0.010"/>
+  <xacro:property name="plate_t"    value="0.006"/>
+  <xacro:property name="plate_r1"   value="${pulley_radius*0.82}"/>
+  <xacro:property name="plate_r2"   value="${tip_radius*0.9}"/>
 
   <!-- Tramos de banda: tangentes a las dos poleas, inclinados belt_angle -->
   <xacro:property name="belt_angle"  value="${asin((pulley_radius - tip_radius) / arm_length)}"/>
@@ -68,7 +75,15 @@
   <xacro:property name="arm_effort"   value="60.0"/>
 
   <!-- ─── Materiales ──────────────────────────────────────────────────── -->
-  <material name="sc_chasis"><color rgba="0.20 0.20 0.20 1.0"/></material>
+  <!-- Los de Horu (fotos): caja roja, chapas amarillas y banda de goma
+       negra. Cada brazo conserva su color en el tapacubos. -->
+  <material name="sc_chasis"><color rgba="0.80 0.05 0.05 1.0"/></material>
+  <material name="sc_tapa">  <color rgba="0.68 0.03 0.03 1.0"/></material>
+  <material name="sc_chapa"> <color rgba="1.00 0.82 0.00 1.0"/></material>
+  <material name="sc_goma">  <color rgba="0.07 0.07 0.07 1.0"/></material>
+  <material name="sc_metal"> <color rgba="0.75 0.76 0.78 1.0"/></material>
+  <material name="sc_negro"> <color rgba="0.12 0.12 0.12 1.0"/></material>
+  <material name="sc_luz">   <color rgba="0.95 0.95 0.85 1.0"/></material>
   <material name="sc_fr">    <color rgba="0.22 0.53 0.90 1.0"/></material>
   <material name="sc_fl">    <color rgba="0.00 0.51 0.00 1.0"/></material>
   <material name="sc_rr">    <color rgba="0.84 0.32 0.51 1.0"/></material>
@@ -151,23 +166,23 @@
       <visual>
         <origin rpy="${pi/2} 0 0"/>
         <geometry><cylinder radius="${pulley_radius}" length="${arm_width}"/></geometry>
-        <material name="${material}"/>
+        <material name="sc_goma"/>
       </visual>
       <visual>
         <origin xyz="${x_sign*arm_length} 0 0" rpy="${pi/2} 0 0"/>
         <geometry><cylinder radius="${tip_radius}" length="${arm_width}"/></geometry>
-        <material name="${material}"/>
+        <material name="sc_goma"/>
       </visual>
       <!-- tramo de arriba y tramo de abajo de la banda -->
       <visual>
         <origin xyz="${x_sign*belt_x} 0 ${belt_z}" rpy="0 ${x_sign*belt_angle} 0"/>
         <geometry><box size="${belt_length} ${arm_width} ${belt_thickness}"/></geometry>
-        <material name="${material}"/>
+        <material name="sc_goma"/>
       </visual>
       <visual>
         <origin xyz="${x_sign*belt_x} 0 ${-belt_z}" rpy="0 ${-x_sign*belt_angle} 0"/>
         <geometry><box size="${belt_length} ${arm_width} ${belt_thickness}"/></geometry>
-        <material name="${material}"/>
+        <material name="sc_goma"/>
       </visual>
       <collision>
         <origin xyz="${x_sign*arm_length/2} 0 0"/>
@@ -184,10 +199,131 @@
     </link>
   </xacro:macro>
 
+  <!-- Tacos de la banda, n por tramo (recursivo). side = +1 arriba, -1 abajo -->
+  <xacro:macro name="tacos" params="n x_sign side">
+    <xacro:if value="${n > 0}">
+      <xacro:property name="ang" value="${side*x_sign*belt_angle}"/>
+      <xacro:property name="u" value="${(n - 0.5)/lug_count*belt_length - belt_length/2}"/>
+      <xacro:property name="off" value="${belt_thickness/2 + lug_height/2}"/>
+      <visual>
+        <origin xyz="${x_sign*belt_x + u*cos(ang) + side*off*sin(ang)} 0 ${side*belt_z - u*sin(ang) + side*off*cos(ang)}"
+                rpy="0 ${ang} 0"/>
+        <geometry><box size="${lug_length} ${arm_width} ${lug_height}"/></geometry>
+        <material name="sc_goma"/>
+      </visual>
+      <xacro:tacos n="${n-1}" x_sign="${x_sign}" side="${side}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="chapa" params="x_sign lado">
+    <visual>
+      <origin xyz="${x_sign*arm_length/2} ${lado*(arm_width/2 + plate_t/2)} 0"/>
+      <geometry><box size="${arm_length} ${plate_t} ${2*plate_r2}"/></geometry>
+      <material name="sc_chapa"/>
+    </visual>
+    <visual>
+      <origin xyz="0 ${lado*(arm_width/2 + plate_t/2)} 0" rpy="${pi/2} 0 0"/>
+      <geometry><cylinder radius="${plate_r1}" length="${plate_t}"/></geometry>
+      <material name="sc_chapa"/>
+    </visual>
+    <visual>
+      <origin xyz="${x_sign*arm_length} ${lado*(arm_width/2 + plate_t/2)} 0" rpy="${pi/2} 0 0"/>
+      <geometry><cylinder radius="${plate_r2}" length="${plate_t}"/></geometry>
+      <material name="sc_chapa"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- Chapas amarillas, tacos, tensor y tapacubos de cada oruga, en un link
+       fijo: chasis_node y el contacto solo leen los cilindros del brazo -->
+  <xacro:macro name="crawler_deco" params="name x_sign y_sign material">
+    <joint name="${name}_deco_joint" type="fixed">
+      <parent link="${name}_link"/>
+      <child link="${name}_deco"/>
+    </joint>
+    <link name="${name}_deco">
+      <xacro:tacos n="${lug_count}" x_sign="${x_sign}" side="1"/>
+      <xacro:tacos n="${lug_count}" x_sign="${x_sign}" side="-1"/>
+      <xacro:chapa x_sign="${x_sign}" lado="1"/>
+      <xacro:chapa x_sign="${x_sign}" lado="-1"/>
+      <visual>
+        <origin xyz="${x_sign*arm_length} ${y_sign*(arm_width/2 + plate_t + 0.006)} 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="0.012" length="0.012"/></geometry>
+        <material name="sc_metal"/>
+      </visual>
+      <visual>
+        <origin xyz="${x_sign*(arm_length - 0.085)} ${y_sign*(arm_width/2 + plate_t + 0.006)} 0.012"/>
+        <geometry><box size="0.07 0.012 0.022"/></geometry>
+        <material name="sc_metal"/>
+      </visual>
+      <visual>
+        <origin xyz="0 ${y_sign*(arm_width/2 + plate_t + 0.008)} 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="0.03" length="0.016"/></geometry>
+        <material name="sc_metal"/>
+      </visual>
+      <visual>
+        <origin xyz="0 ${y_sign*(arm_width/2 + plate_t + 0.017)} 0" rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="0.014" length="0.003"/></geometry>
+        <material name="${material}"/>
+      </visual>
+    </link>
+  </xacro:macro>
+
   <xacro:crawler name="crawler_fr" x_sign="1"  y_sign="-1" material="sc_fr"/>
   <xacro:crawler name="crawler_fl" x_sign="1"  y_sign="1"  material="sc_fl"/>
   <xacro:crawler name="crawler_rr" x_sign="-1" y_sign="-1" material="sc_rr"/>
   <xacro:crawler name="crawler_rl" x_sign="-1" y_sign="1"  material="sc_rl"/>
+  <xacro:crawler_deco name="crawler_fr" x_sign="1"  y_sign="-1" material="sc_fr"/>
+  <xacro:crawler_deco name="crawler_fl" x_sign="1"  y_sign="1"  material="sc_fl"/>
+  <xacro:crawler_deco name="crawler_rr" x_sign="-1" y_sign="-1" material="sc_rr"/>
+  <xacro:crawler_deco name="crawler_rl" x_sign="-1" y_sign="1"  material="sc_rl"/>
+
+  <!-- Detalles de la caja: tapa, faros, asas y soportes de los brazos -->
+  <xacro:macro name="faro" params="y">
+    <visual>
+      <origin xyz="${base_length/2 + 0.01} ${y} -0.01" rpy="0 ${pi/2} 0"/>
+      <geometry><cylinder radius="0.022" length="0.02"/></geometry>
+      <material name="sc_negro"/>
+    </visual>
+    <visual>
+      <origin xyz="${base_length/2 + 0.021} ${y} -0.01" rpy="0 ${pi/2} 0"/>
+      <geometry><cylinder radius="0.016" length="0.003"/></geometry>
+      <material name="sc_luz"/>
+    </visual>
+  </xacro:macro>
+  <xacro:macro name="soporte" params="xs ys">
+    <visual>
+      <origin xyz="${xs*(base_length/2 - 0.06)} ${ys*(base_width/2 - 0.05)} ${-base_height/2 - 0.012}"/>
+      <geometry><box size="0.10 0.07 0.024"/></geometry>
+      <material name="sc_metal"/>
+    </visual>
+  </xacro:macro>
+  <joint name="chasis_deco_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="chasis_deco"/>
+  </joint>
+  <link name="chasis_deco">
+    <visual>
+      <origin xyz="0 0 ${base_height/2 + 0.002}"/>
+      <geometry><box size="${base_length - 0.02} ${base_width - 0.02} 0.004"/></geometry>
+      <material name="sc_tapa"/>
+    </visual>
+    <xacro:faro y="0.09"/>
+    <xacro:faro y="-0.09"/>
+    <visual>
+      <origin xyz="0.12 ${base_width/2 + 0.006} 0.015"/>
+      <geometry><box size="0.06 0.012 0.03"/></geometry>
+      <material name="sc_negro"/>
+    </visual>
+    <visual>
+      <origin xyz="0.12 ${-base_width/2 - 0.006} 0.015"/>
+      <geometry><box size="0.06 0.012 0.03"/></geometry>
+      <material name="sc_negro"/>
+    </visual>
+    <xacro:soporte xs="1"  ys="1"/>
+    <xacro:soporte xs="1"  ys="-1"/>
+    <xacro:soporte xs="-1" ys="1"/>
+    <xacro:soporte xs="-1" ys="-1"/>
+  </link>
 
   <!-- ─── Sitio para la IMU ───────────────────────────────────────────────
        En el TFG la MPU9250 iba en el frontal del chasis. Con PC a bordo lo
