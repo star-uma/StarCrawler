@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'sim_node = starcrawler_sim.sim_node:main',
             'mundo_node = starcrawler_sim.mundo_node:main',
+            'fisica_node = starcrawler_sim.fisica_node:main',
             'mundo_check = starcrawler_sim.mundo_check:main',
         ],
     },

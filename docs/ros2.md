@@ -270,6 +270,25 @@ degradado, sin desconectar nada de verdad:
 ros2 launch starcrawler_bringup robot.launch.py sim:=true   --ros-args -p starcrawler_sim.encoders_ok:=false
 ```
 
+### Física de verdad (`fisica:=true`, MuJoCo)
+
+Con `fisica:=true`, `fisica_node` sustituye a `mundo_node`: mismas entradas y
+salidas, pero el robot es un sólido libre con sus brazos y orugas en MuJoCo, y
+vuelca, patina o se queda colgado de verdad. Cada oruga es una cadena de
+ruedas solapadas a la velocidad de banda, con el tope de fuerza del RMD; los
+brazos van por posición, rígidos como el sinfín. La geometría sale del URDF y
+el terreno, de los mismos `mundos/*.yaml`.
+
+```bash
+python3 -m pip install --user "mujoco<3.3" "numpy<2"     # una vez, sin sudo
+ros2 launch starcrawler_bringup robot.launch.py sim:=true fisica:=true mundo:=escalera gui:=true joy_udp:=true
+ros2 launch starcrawler_bringup robot.launch.py sim:=true fisica:=true mundo:=escalon visor:=true   # + visor de MuJoCo
+```
+
+Sin `mundo:=` va en llano. Los parámetros (rozamiento 0,9, 350 N por oruga, 200
+N·m en el brazo) son estimaciones en `fisica_core.ParFisica`: pendientes de
+medir, igual que las cotas del URDF.
+
 ### El ESP32 real con la planta simulada (`HW_SIMULADO`)
 
 A medio camino: el firmware de micro-ROS de verdad, en el ESP32 de verdad,

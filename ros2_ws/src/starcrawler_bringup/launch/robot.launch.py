@@ -22,6 +22,7 @@ Uso:
     ros2 launch starcrawler_bringup robot.launch.py sim:=true gui_mando:=true  # conducir desde la web
     ros2 launch starcrawler_bringup robot.launch.py sim:=true mundo:=escalon rviz:=true gui:=true
     ros2 launch starcrawler_bringup robot.launch.py port:=/dev/ttyUSB0 mundo:=rampa  # HW_SIMULADO
+    ros2 launch starcrawler_bringup robot.launch.py sim:=true mundo:=escalera fisica:=true gui:=true  # MuJoCo
 """
 import os
 
@@ -115,6 +116,13 @@ def generate_launch_description():
             description='Mundo con obstaculos para el robot simulado: nombre '
                         'en starcrawler_sim/mundos o ruta a un .yaml. Vacio = '
                         'como hasta ahora'),
+        DeclareLaunchArgument(
+            'fisica', default_value='false',
+            description='Fisica de MuJoCo (fisica_node) en vez del contacto '
+                        'cuasiestatico. Sin mundo:=, en llano'),
+        DeclareLaunchArgument(
+            'visor', default_value='false',
+            description='Con fisica:=true, abrir tambien el visor de MuJoCo'),
     ]
 
     simulate = LaunchConfiguration('simulate')
@@ -127,8 +135,10 @@ def generate_launch_description():
     mux_yaml = PathJoinSubstitution([teleop_share, 'config', 'mux.yaml'])
 
     # Con mundo, mundo_node publica la pose verdadera (TF y juntas del chasis)
-    con_mundo = PythonExpression(["'", mundo, "' != ''"])
-    sin_mundo = PythonExpression(["'", mundo, "' == ''"])
+    fisica = PythonExpression([
+        "'", LaunchConfiguration('fisica'), "'.lower() in ('true', '1')"])
+    con_mundo = PythonExpression(["'", mundo, "' != '' or ", fisica])
+    sin_mundo = PythonExpression(["not (", con_mundo, ")"])
 
     # Los muxes hacen falta con cualquier fuente de consignas. Como
     # IfCondition, 'true', 'True' y '1' valen lo mismo
@@ -227,8 +237,23 @@ def generate_launch_description():
             package='starcrawler_sim',
             executable='mundo_node',
             name='starcrawler_mundo',
-            condition=IfCondition(con_mundo),
+            condition=IfCondition(PythonExpression(
+                ["'", mundo, "' != '' and not ", fisica])),
             parameters=[{'mundo': ParameterValue(mundo, value_type=str),
+                         **geometria_de_la_odometria()}],
+            output='screen',
+        ),
+        # Lo mismo con la fisica de MuJoCo
+        Node(
+            package='starcrawler_sim',
+            executable='fisica_node',
+            name='starcrawler_mundo',
+            condition=IfCondition(fisica),
+            parameters=[{'mundo': ParameterValue(PythonExpression(
+                             ["'", mundo, "' or 'llano'"]), value_type=str),
+                         'visor': ParameterValue(PythonExpression(
+                             ["'", LaunchConfiguration('visor'),
+                              "'.lower() in ('true', '1')"]), value_type=bool),
                          **geometria_de_la_odometria()}],
             output='screen',
         ),
