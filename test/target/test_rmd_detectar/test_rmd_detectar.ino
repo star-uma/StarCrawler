@@ -271,10 +271,68 @@ static void encoderVivo() {
   parar();
 }
 
+/* Freno: 0x77 lo suelta, 0x78 lo echa (si el motor no tiene, no hace nada) */
+static void freno(bool soltar) {
+  uint8_t r[8];
+  if (!arrancar(true)) { Serial.println("  no arranca el TWAI"); return; }
+  int n = preguntar(idMotor, soltar ? 0x77 : 0x78, r, nullptr);
+  Serial.printf("\n%s freno: %s\n", soltar ? "Soltar" : "Echar", n ? "contesta" : "sin respuesta");
+  if ((n = preguntar(idMotor, 0x9A, r, nullptr))) {
+    bruto("0x9A", r, n);
+    Serial.printf("freno %u (1 = suelto), error 0x%04X\n", r[3], u16(r + 6));
+  }
+  parar();
+}
+
+/* Empujon de par pequeno (0xA1): iq_cA centesimas de amperio durante ms,
+ * leyendo el encoder en bruto. Despues apaga el motor (0x80). */
+static void empujon(int16_t iq_cA, uint32_t ms) {
+  uint8_t r[8], e[8];
+  Serial.printf("\n=== EMPUJON %.2f A durante %lu ms (MUEVE POCO) ===\n", iq_cA * 0.01f, (unsigned long)ms);
+  if (!arrancar(true)) { Serial.println("  no arranca el TWAI"); return; }
+  twai_message_t m = {};
+  m.identifier = 0x140 + idMotor;
+  m.data_length_code = 8;
+  m.data[0] = 0xA1;
+  m.data[4] = (uint8_t)(iq_cA & 0xFF);
+  m.data[5] = (uint8_t)((iq_cA >> 8) & 0xFF);
+  uint32_t t0 = millis();
+  bool apagado = false;
+  while (millis() - t0 < ms + 500) {
+    bool empuja = millis() - t0 < ms;
+    if (empuja) {
+      twai_message_t rx;
+      while (twai_receive(&rx, 0) == ESP_OK) {}
+      twai_transmit(&m, pdMS_TO_TICKS(10));
+      delay(3);
+    }
+    if (!empuja && !apagado) {
+      uint8_t ap[8];
+      preguntar(idMotor, 0x80, ap, nullptr);
+      apagado = true;
+    }
+    uint8_t f[8];
+    int a = preguntar(idMotor, 0x9C, r, nullptr);
+    int b = preguntar(idMotor, 0x90, e, nullptr);
+    int c = preguntar(idMotor, 0x9D, f, nullptr);
+    Serial.printf("PAR,%lu,%s,iq %.2f A,enc bruto %u,fases %.2f %.2f %.2f A\n",
+                  (unsigned long)(millis() - t0), empuja ? "empuja" : "suelto",
+                  a ? i16(r + 2) * 0.01f : NAN, b ? u16(e + 4) : 0,
+                  c ? i16(f + 2) * 0.01f : NAN, c ? i16(f + 4) * 0.01f : NAN,
+                  c ? i16(f + 6) * 0.01f : NAN);
+    delay(40);
+  }
+  uint8_t apaga[8];
+  preguntar(idMotor, 0x80, apaga, nullptr);
+  if (preguntar(idMotor, 0x9A, r, nullptr)) Serial.printf("  al final: error 0x%04X\n", u16(r + 6));
+  parar();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n test_rmd_detectar: d detecta, l lee todo, e encoder en vivo. Nada mueve.");
+  Serial.println("\n test_rmd_detectar: d detecta, l lee todo, e encoder en vivo (no mueven);"
+                 " b/B suelta/echa freno; t empujon de 1,5 A 1 s.");
 }
 
 void loop() {
@@ -283,6 +341,9 @@ void loop() {
   if (c == 'd' || c == 'D') detectar();
   else if (c == 'l' || c == 'L') leerTodo();
   else if (c == 'e' || c == 'E') encoderVivo();
+  else if (c == 'b') freno(true);
+  else if (c == 'B') freno(false);
+  else if (c == 't' || c == 'T') empujon(150, 1000);
   else if (c == 'h' || c == 'H')
     Serial.println(" d = detectar IDs 1..32 a 1 Mbps y 500 kbps\n"
                    " l = lectura completa del motor 1 (estado, fases, encoder, PID, aceleracion)\n"
