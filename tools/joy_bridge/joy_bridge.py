@@ -63,6 +63,58 @@ def elegir_disposicion(mando):
     return nombre
 
 
+class Xbox:
+    """Mando de Xbox por la API GameController de SDL: se lee por nombre de
+    boton, sin depender del orden crudo, que cambia con el driver de Windows.
+    A/B/X/Y van donde X/O/[]/T del DS4, LB/RB a L1/R1, View/Menu a
+    share/options y el boton Xbox a PS."""
+
+    def __init__(self, indice):
+        from pygame._sdl2 import controller
+        controller.init()
+        self.c = controller.Controller(indice)
+        self.joy = pygame.joystick.Joystick(indice)
+        self.joy.init()
+
+    def get_name(self):
+        return self.joy.get_name()
+
+    def get_instance_id(self):
+        return self.joy.get_instance_id()
+
+
+def abrir(indice=0):
+    """El mando y el nombre de su disposicion."""
+    joy = pygame.joystick.Joystick(indice)
+    joy.init()
+    if "xbox" in joy.get_name().lower():
+        return Xbox(indice), "gamecontroller (Xbox)"
+    return joy, elegir_disposicion(joy)
+
+
+def leer_xbox(m):
+    eje = lambda k: max(-1.0, m.c.get_axis(k) / 32767.0)    # noqa: E731
+    bot = lambda k: 1 if m.c.get_button(k) else 0             # noqa: E731
+    lt = eje(pygame.CONTROLLER_AXIS_TRIGGERLEFT)              # 0 suelto, 1 a fondo
+    rt = eje(pygame.CONTROLLER_AXIS_TRIGGERRIGHT)
+    ejes = [-eje(pygame.CONTROLLER_AXIS_LEFTX), -eje(pygame.CONTROLLER_AXIS_LEFTY),
+            1.0 - 2.0 * lt,
+            -eje(pygame.CONTROLLER_AXIS_RIGHTX), -eje(pygame.CONTROLLER_AXIS_RIGHTY),
+            1.0 - 2.0 * rt,
+            float(bot(pygame.CONTROLLER_BUTTON_DPAD_LEFT) - bot(pygame.CONTROLLER_BUTTON_DPAD_RIGHT)),
+            float(bot(pygame.CONTROLLER_BUTTON_DPAD_UP) - bot(pygame.CONTROLLER_BUTTON_DPAD_DOWN))]
+    botones = [bot(pygame.CONTROLLER_BUTTON_A), bot(pygame.CONTROLLER_BUTTON_B),
+               bot(pygame.CONTROLLER_BUTTON_Y), bot(pygame.CONTROLLER_BUTTON_X),
+               bot(pygame.CONTROLLER_BUTTON_LEFTSHOULDER),
+               bot(pygame.CONTROLLER_BUTTON_RIGHTSHOULDER),
+               1 if lt > 0.5 else 0, 1 if rt > 0.5 else 0,
+               bot(pygame.CONTROLLER_BUTTON_BACK), bot(pygame.CONTROLLER_BUTTON_START),
+               bot(pygame.CONTROLLER_BUTTON_GUIDE),
+               bot(pygame.CONTROLLER_BUTTON_LEFTSTICK),
+               bot(pygame.CONTROLLER_BUTTON_RIGHTSTICK)]
+    return [round(v, 3) for v in ejes], botones
+
+
 FRECUENCIA_HZ = 50
 
 
@@ -80,11 +132,11 @@ def abrir_mando():
     if pygame.joystick.get_count() == 0:
         sys.exit("No hay ningun mando. Empareja el DS4 por Bluetooth (Share+PS) "
                  "o conectalo por USB y vuelve a lanzar.")
-    mando = pygame.joystick.Joystick(0)
-    mando.init()
+    mando, disposicion = abrir(0)
+    j = mando.joy if isinstance(mando, Xbox) else mando
     print("Mando: %s | ejes %d | botones %d | hats %d | disposicion %s"
-          % (mando.get_name(), mando.get_numaxes(), mando.get_numbuttons(),
-             mando.get_numhats(), elegir_disposicion(mando)))
+          % (j.get_name(), j.get_numaxes(), j.get_numbuttons(),
+             j.get_numhats(), disposicion))
     return mando
 
 
@@ -93,6 +145,12 @@ def probar(mando):
     try:
         while True:
             pygame.event.pump()
+            if isinstance(mando, Xbox):
+                # Ya traducido al orden del DS4 que espera el teleop
+                ejes, botones = leer_xbox(mando)
+                print("\rejes %s  botones %s   " % (ejes, botones), end="", flush=True)
+                time.sleep(0.05)
+                continue
             ejes = ["%+.2f" % mando.get_axis(i) for i in range(mando.get_numaxes())]
             botones = [i for i in range(mando.get_numbuttons()) if mando.get_button(i)]
             hats = [mando.get_hat(i) for i in range(mando.get_numhats())]
@@ -105,6 +163,8 @@ def probar(mando):
 
 def leer(mando):
     """Devuelve (ejes, botones) ya en el formato del nodo joy de Linux."""
+    if isinstance(mando, Xbox):
+        return leer_xbox(mando)
     a = lambda n: mando.get_axis(EJES_WIN[n])          # noqa: E731
     b = lambda n: 1 if mando.get_button(BOTONES_WIN[n]) else 0  # noqa: E731
 
@@ -159,10 +219,9 @@ def main():
             # El aviso de alta puede llegar antes que el de baja: se reabre
             # en cuanto vuelve a haber un mando, no con el evento
             if mando is None and pygame.joystick.get_count() > 0:
-                mando = pygame.joystick.Joystick(0)
-                mando.init()
+                mando, disposicion = abrir(0)
                 print("Mando reconectado: %s | disposicion %s"
-                      % (mando.get_name(), elegir_disposicion(mando)))
+                      % (mando.get_name(), disposicion))
             # Sin mando no se envia nada: joy_udp_node pasa a neutro solo
             if mando is not None:
                 ejes, botones = leer(mando)
