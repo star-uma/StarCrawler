@@ -1,5 +1,6 @@
 /*
  * test_encoders.ino - StarCrawler - PRUEBA 1 de 4
+ *                     (y ENCODERS, PASO 5 de 5)
  * ================================================================
  *
  *   QUE PRUEBA ESTO
@@ -9,6 +10,12 @@
  *
  *   RIESGO: NINGUNO. Aqui no se mueve ningun motor.
  *   Es la primera prueba que hay que hacer y la mas segura.
+ *
+ *   SI ALGO FALLA, prueba las piezas por separado, en orden:
+ *     1. test_i2c_escaner   el bus: pull-ups, cortos, direcciones
+ *     2. test_as5600_solo   un encoder solo, sin multiplexor
+ *     3-4. test_tca9548a    el multiplexor solo, y con un encoder
+ *   (ver "Encoders, paso a paso" en test/target/README.md)
  *
  *   QUE NECESITAS CONECTADO
  *     - ESP32 DevKit V1 conectado por USB al PC
@@ -25,7 +32,9 @@
  *     a) Que los 4 encoders respondan            -> comando 's'
  *     b) Saber que canal es que oruga de verdad  -> comando 'c',
  *        moviendo cada brazo A MANO y mirando cual cambia
- *     c) Los offsets de calibracion              -> comando 'o',
+ *     c) Que cada sensor va en el sentido bueno  -> comando 'u',
+ *        subiendo cada brazo A MANO
+ *     d) Los offsets de calibracion              -> comando 'o',
  *        con las 4 orugas puestas en horizontal
  *
  * ================================================================
@@ -91,6 +100,21 @@ bool leerCrudo(int idx, uint16_t *crudo) {
   return true;
 }
 
+/* Estado del iman, registro 0x0B del AS5600:
+ *   bit 5 = iman detectado, bit 4 = demasiado debil, bit 3 = demasiado fuerte */
+const char* estadoIman(int idx) {
+  if (!abrirCanal(idx)) return "?";
+  Wire.beginTransmission(DIR_AS5600);
+  Wire.write(0x0B);
+  if (Wire.endTransmission(false) != 0) return "?";
+  if (Wire.requestFrom((int)DIR_AS5600, 1) != 1) return "?";
+  const uint8_t st = Wire.read();
+  if (!(st & 0x20)) return "SIN IMAN";
+  if (st & 0x10)    return "iman DEBIL: acercalo";
+  if (st & 0x08)    return "iman FUERTE: alejalo";
+  return "iman ok";
+}
+
 /* Convierte el valor crudo a grados y le suma el offset de montaje.
  * Es exactamente la misma formula que usa el firmware. */
 float aGrados(uint16_t crudo, float offset) {
@@ -126,6 +150,7 @@ void ayuda() {
   Serial.println(F("|      Pulsa Enter para parar.                        |"));
   Serial.println(F("|  1   Solo oruga FR       3   Solo oruga RR          |"));
   Serial.println(F("|  2   Solo oruga FL       4   Solo oruga RL          |"));
+  Serial.println(F("|  u   Sentido: sube cada brazo y mira si va bien     |"));
   Serial.println(F("|  o   Asistente de offsets (orugas EN HORIZONTAL)    |"));
   Serial.println(F("|  h   Mostrar esta ayuda                             |"));
   Serial.println(F("+-----------------------------------------------------+"));
@@ -147,6 +172,7 @@ void escanearBus() {
     Serial.println(F("          - los cables SDA (pin 21) y SCL (pin 22)"));
     Serial.println(F("          - que A0, A1 y A2 esten conectados a GND"));
     Serial.println(F("        Sin el mux no se puede leer ningun encoder."));
+    Serial.println(F("        Para buscar el fallo: test_i2c_escaner y test_tca9548a."));
     Serial.println();
     return;
   }
@@ -162,6 +188,8 @@ void escanearBus() {
       Serial.print(NOMBRE[i]);
       Serial.print(F(", crudo = "));
       Serial.print(crudo);
+      Serial.print(F(", "));
+      Serial.print(estadoIman(i));
       Serial.println(F(")"));
       encontrados++;
     } else {
@@ -181,6 +209,9 @@ void escanearBus() {
     Serial.println(F(">>> Bien. Siguiente paso: comando 'c'."));
   } else {
     Serial.println(F(">>> Arregla el cableado de los que fallan ANTES de seguir."));
+    Serial.println(F("    Truco: pon un encoder que funciona en el canal que falla"));
+    Serial.println(F("    (test_tca9548a): si sigue fallando, es el canal; si no,"));
+    Serial.println(F("    es el encoder o su cable (test_as5600_solo)."));
   }
   Serial.println();
 }
@@ -295,18 +326,29 @@ void asistenteOffsets() {
   bool  ok[NUM_ORUGAS];
 
   for (int i = 0; i < NUM_ORUGAS; i++) {
-    float suma = 0.0f;
-    int   validas = 0;
+    /* Se promedia la diferencia con la primera muestra, no el angulo:
+     * cerca de 0/360, la media de 359,9 y 0,1 daria 180. */
+    uint16_t referencia = 0;
+    bool     hayReferencia = false;
+    long     suma = 0;
+    int      validas = 0;
     for (int m = 0; m < 50; m++) {
       uint16_t crudo;
       if (leerCrudo(i, &crudo)) {
-        suma += aGrados(crudo, 0.0f);
+        if (!hayReferencia) { referencia = crudo; hayReferencia = true; }
+        int d = (int)crudo - (int)referencia;
+        if (d > 2048)  d -= 4096;
+        if (d < -2048) d += 4096;
+        suma += d;
         validas++;
       }
       delay(10);
     }
     if (validas >= 25) {
-      float medio = suma / (float)validas;
+      float medio = aGrados(referencia, 0.0f) +
+                    (float)suma / (float)validas * 0.087890625f;
+      if (medio < 0.0f)    medio += 360.0f;
+      if (medio >= 360.0f) medio -= 360.0f;
       nuevos[i] = 180.0f - medio;   /* offset que lleva la lectura a 180 */
       ok[i] = true;
     } else {
@@ -346,11 +388,94 @@ void asistenteOffsets() {
     }
     Serial.println(F(" }"));
     Serial.println();
-    Serial.println(F("OJO: hay que cambiarla en las 4 variantes de firmware"));
-    Serial.println(F("(esp32, esp32_basico, esp32_standalone, esp32_ros2)."));
+    Serial.println(F("Donde va:"));
+    Serial.println(F("  feature/ros2: firmware/libraries/StarCrawlerHW/src/hw_comun.h"));
+    Serial.println(F("                y micro_ros_esp32_apps/starcrawler_app/config.h"));
+    Serial.println(F("  esta rama:    el config.h de cada variante de firmware/"));
+
+    /* El firmware calcula crudo * 0,088 + offset sin dar la vuelta a 360.
+     * Con un offset de 85 grados o mas, el salto 4095 -> 0 del sensor cae
+     * dentro del recorrido del brazo (85-275) y el angulo salta 360. */
+    bool fuera = false;
+    for (int i = 0; i < NUM_ORUGAS; i++) {
+      if (nuevos[i] <= -85.0f || nuevos[i] >= 85.0f) fuera = true;
+    }
+    if (fuera) {
+      Serial.println();
+      Serial.println(F("[AVISO] Algun offset pasa de +-85 grados: ese iman esta"));
+      Serial.println(F("        montado girado. Con el firmware de ahora, el angulo"));
+      Serial.println(F("        de esa oruga saltaria 360 grados en mitad del"));
+      Serial.println(F("        recorrido. O se gira el iman en su eje hasta que el"));
+      Serial.println(F("        offset quede pequeno, o el firmware tiene que dar la"));
+      Serial.println(F("        vuelta al angulo (issue #28)."));
+    }
   } else {
     Serial.println(F("No se genera la linea porque fallo algun encoder."));
   }
+  Serial.println();
+}
+
+/* Al subir un brazo, su angulo de encoder tiene que ir hacia donde lo
+ * espera el firmware: baja en FR y RL, sube en FL y RR, que van
+ * espejadas (starcrawler_common/angulos.py en feature/ros2). */
+void comprobarSentido() {
+  const int esperado[NUM_ORUGAS] = {-1, +1, +1, -1};
+  int bien = 0, mal = 0;
+
+  Serial.println();
+  Serial.println(F("=== SENTIDO DE CADA SENSOR ==="));
+  Serial.println(F("Para cada oruga: SUBE el brazo a mano unos 20-30 grados"));
+  Serial.println(F("y pulsa Enter. Escribe N y Enter para saltarte una."));
+  Serial.println();
+
+  for (int i = 0; i < NUM_ORUGAS; i++) {
+    uint16_t antes;
+    if (!leerCrudo(i, &antes)) {
+      Serial.print(NOMBRE[i]);
+      Serial.println(F(": NO RESPONDE, me la salto"));
+      continue;
+    }
+    Serial.print(F("Sube el brazo "));
+    Serial.print(NOMBRE[i]);
+    Serial.println(F(" y pulsa Enter..."));
+    while (!Serial.available()) delay(10);
+    String r = Serial.readStringUntil('\n');
+    r.trim();
+    r.toUpperCase();
+    if (r == "N") continue;
+
+    uint16_t despues;
+    if (!leerCrudo(i, &despues)) {
+      Serial.println(F("  NO RESPONDE"));
+      continue;
+    }
+    int d = (int)despues - (int)antes;
+    if (d > 2048)  d -= 4096;
+    if (d < -2048) d += 4096;
+    const float g = (float)d * 0.087890625f;
+
+    Serial.print(F("  cambio "));
+    Serial.print(g, 1);
+    Serial.print(F(" grados: "));
+    if (fabsf(g) < 3.0f) {
+      Serial.println(F("casi no se ha movido, repite con 'u'"));
+    } else if ((g > 0) == (esperado[i] > 0)) {
+      Serial.println(F("[OK] va en el sentido bueno"));
+      bien++;
+    } else {
+      Serial.println(F("[ERROR] AL REVES"));
+      Serial.println(F("  Ese sensor tiene DIR distinto de los demas (tiene que ir"));
+      Serial.println(F("  a GND) o esta montado del reves. Con el firmware, ese"));
+      Serial.println(F("  brazo se iria hacia el lado contrario al pedido."));
+      mal++;
+    }
+  }
+  Serial.println();
+  Serial.print(F("Resultado: "));
+  Serial.print(bien);
+  Serial.print(F(" bien, "));
+  Serial.print(mal);
+  Serial.println(F(" al reves."));
   Serial.println();
 }
 
@@ -415,6 +540,10 @@ void loop() {
       for (int i = 0; i < NUM_ORUGAS; i++) { hayUltimo[i] = false; vecesIgual[i] = 0; }
       cabeceraContinuo();
       modoContinuo = true;
+      break;
+
+    case 'u': case 'U':
+      comprobarSentido();
       break;
 
     case 'o': case 'O':
