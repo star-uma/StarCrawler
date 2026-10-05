@@ -154,7 +154,7 @@ Write-Host "  Nota: las pruebas 1, 3 y 4 solo usan Wire, que viene" -ForegroundC
 Write-Host "  incluida con el ESP32. No hace falta instalar nada mas." -ForegroundColor DarkGray
 
 # ------------------------------------------------------------------
-# 5. Comprobacion: que los 4 sketches compilen de verdad
+# 5. Comprobacion: que los sketches compilen de verdad
 # ------------------------------------------------------------------
 Titulo "5 de 5 - Comprobando que todo compila"
 
@@ -162,6 +162,9 @@ $raiz = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $fallos = 0
 
 $pruebas = @(
+    @{ nombre = "test_i2c_escaner"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_as5600_solo"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
+    @{ nombre = "test_tca9548a";    fqbn = "esp32:esp32:esp32doit-devkit-v1" },
     @{ nombre = "test_encoders";    fqbn = "esp32:esp32:esp32doit-devkit-v1" },
     @{ nombre = "test_imu";         fqbn = "esp32:esp32:esp32doit-devkit-v1" },
     @{ nombre = "test_steppers_all"; fqbn = "esp32:esp32:esp32doit-devkit-v1" },
@@ -198,7 +201,7 @@ Titulo "Resultado"
 
 if ($fallos -eq 0) {
     Write-Host ""
-    Bien "Los 8 sketches compilan. El entorno esta listo."
+    Bien "Los $($pruebas.Count) sketches compilan. El entorno esta listo."
     Write-Host ""
     Write-Host "  SIGUIENTE PASO: conecta la placa por USB y mira que puerto es:"
     Write-Host ""
@@ -219,7 +222,7 @@ if ($fallos -eq 0) {
     Write-Host ""
 } else {
     Write-Host ""
-    Malo "$fallos de 8 sketches no compilan."
+    Malo "$fallos de $($pruebas.Count) sketches no compilan."
     Write-Host ""
     Write-Host "  Revisa los errores de arriba. Lo mas habitual es que falte"
     Write-Host "  algun soporte de placa: vuelve a ejecutar este script."

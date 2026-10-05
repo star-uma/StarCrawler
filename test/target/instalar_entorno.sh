@@ -177,15 +177,17 @@ else
 fi
 
 # ---------------------------------------------------------------------
-# 6. Comprobacion: que los 4 sketches compilen de verdad
+# 6. Comprobacion: que los sketches compilen de verdad
 # ---------------------------------------------------------------------
 titulo "6 de 6 - Comprobando que todo compila"
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FALLOS=0
+TOTAL=0
 
 comprobar() { # $1=nombre  $2=fqbn
   local ruta="$RAIZ/test/target/$1"
+  TOTAL=$((TOTAL+1))
   paso "Compilando $1..."
   if [ ! -d "$ruta" ]; then
     malo "No se encuentra la carpeta $ruta"
@@ -201,6 +203,9 @@ comprobar() { # $1=nombre  $2=fqbn
   fi
 }
 
+comprobar test_i2c_escaner "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_as5600_solo "esp32:esp32:esp32doit-devkit-v1"
+comprobar test_tca9548a    "esp32:esp32:esp32doit-devkit-v1"
 comprobar test_encoders    "esp32:esp32:esp32doit-devkit-v1"
 comprobar test_imu         "esp32:esp32:esp32doit-devkit-v1"
 comprobar test_steppers_all "esp32:esp32:esp32doit-devkit-v1"
@@ -217,7 +222,7 @@ titulo "Resultado"
 
 if [ "$FALLOS" -eq 0 ]; then
   echo
-  bien "Los 8 sketches compilan. El entorno esta listo."
+  bien "Los $TOTAL sketches compilan. El entorno esta listo."
   echo
   echo "  SIGUIENTE PASO: conecta la placa por USB y mira que puerto es:"
   echo
@@ -241,7 +246,7 @@ if [ "$FALLOS" -eq 0 ]; then
   echo
 else
   echo
-  malo "$FALLOS de 8 sketches no compilan."
+  malo "$FALLOS de $TOTAL sketches no compilan."
   echo
   echo "  Revisa los errores de arriba. Lo mas habitual es que falte"
   echo "  algun soporte de placa: vuelve a ejecutar este script."
