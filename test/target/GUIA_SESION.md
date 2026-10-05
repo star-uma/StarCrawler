@@ -41,11 +41,14 @@ arduino-cli upload -p COMx --fqbn esp32:esp32:esp32doit-devkit-v1 test\target\te
 arduino-cli monitor -p COMx -c baudrate=115200
 ```
 
-1. `s` — ¿responden los 4? Si falla el multiplexor, para y arréglalo: sin él
-   no se lee ningún encoder.
+1. `s` — ¿responden los 4, con el imán `ok`? Si algo falla, para y ve pieza a
+   pieza: "Encoders, paso a paso" en el README (`test_i2c_escaner`,
+   `test_as5600_solo`, `test_tca9548a`).
 2. `c` — mueve cada brazo **a mano** y mira qué columna cambia.
-3. Pon las cuatro orugas **horizontales** → `o` → confirma con `SI` → copia la
-   línea `#define OFFSETS_ENCODER {...}` que imprime.
+3. `u` — sube cada brazo a mano: los cuatro tienen que salir `[OK]`.
+4. Pon las cuatro orugas **horizontales** → `o` → confirma con `SI` → copia la
+   línea `#define OFFSETS_ENCODER {...}` que imprime. Si avisa de un offset
+   fuera de ±85°, no lo copies: ese imán está girado (#28).
 
 | Canal | Oruga que se mueve de verdad | Offset medido |
 |---|---|---|
@@ -175,7 +178,7 @@ Vuelca las tablas a los comentarios de las issues correspondientes:
 encoders y offsets a la #1 y #5, tracción a la #2, steppers a la #3,
 IMU a la #4.
 
-Si actualizas `OFFSETS_ENCODER` en `config.h`, recuerda que hay que tocarlo en
-**cuatro sitios**: `starcrawler_esp32`, `starcrawler_esp32_basico`,
-`starcrawler_esp32_standalone` y `starcrawler_esp32_ros2`. Es lo que
-describe la issue #10.
+Si actualizas `OFFSETS_ENCODER`: en `feature/ros2` va en
+`firmware/libraries/StarCrawlerHW/src/hw_comun.h` y en
+`micro_ros_esp32_apps/starcrawler_app/config.h` (los dos, ver #28). En esta
+rama, en el `config.h` de cada variante de `firmware/`.

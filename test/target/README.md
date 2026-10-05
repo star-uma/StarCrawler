@@ -46,6 +46,9 @@ hay que averiguar por qué.
 | `test_par_stepper` | ESP32 | Por qué un stepper pierde pasos. Separa par de retención, arranque y velocidad, sin necesitar encoder |
 | `test_motor_diag` | MKR + shield CAN | Fallos intermitentes de **un** motor de tracción: vuelca telemetría en CSV (velocidad real, corriente, temperatura) para verlo con datos y no a ojo |
 | `test_can_esp32` | ESP32 | Validar el transceptor CAN del ESP32 por TWAI, antes de confiarle los motores |
+| `test_i2c_escaner` | ESP32 | El bus I2C: pull-ups, líneas en corto y qué responde en cada dirección. Ver [encoders, paso a paso](#encoders-paso-a-paso) |
+| `test_as5600_solo` | ESP32 | **Un** encoder sin multiplexor: imán, ganancia, ruido, una vuelta completa y sentido |
+| `test_tca9548a` | ESP32 | El multiplexor solo, y luego con un encoder canal a canal |
 
 ### Orden recomendado
 
@@ -58,6 +61,107 @@ hay que averiguar por qué.
 
 Si en el paso 4 un motor pierde pasos, sigue con `test_par_stepper`. Si en el
 3 un motor va raro de forma intermitente, con `test_motor_diag`.
+
+---
+
+## Encoders, paso a paso
+
+`test_encoders` necesita que **todo** funcione a la vez: el bus, el
+multiplexor y los cuatro sensores. Si falla, no dice qué pieza es. Para eso
+están estos pasos, que van añadiendo piezas de una en una. Úsalos al montar
+los encoders por primera vez, o cuando `test_encoders` falle.
+
+| Paso | Sketch | Qué va conectado | Qué averigua |
+|---|---|---|---|
+| 1 | `test_i2c_escaner` | Lo que haya, aunque sea nada | Si el bus está sano y qué responde |
+| 2 | `test_as5600_solo` | **Un** AS5600 directo al ESP32 | Si ese sensor y su imán van bien |
+| 3 | `test_tca9548a` (`m`) | El multiplexor solo | Si el multiplexor funciona |
+| 4 | `test_tca9548a` (`c`) | Multiplexor + **un** AS5600 | Si cada canal funciona |
+| 5 | `test_encoders` | Todo | Que canal es cada oruga, sentido y offsets |
+
+Ninguno mueve motores ni escribe en los sensores.
+
+**La regla para localizar un fallo**: cambia una sola cosa cada vez. Un
+encoder que va bien en el paso 2 y falla en el 4 apunta al canal o a su
+cable; uno que falla ya en el paso 2 es el sensor, su imán o su cable.
+
+### Cómo se conecta cada montaje
+
+Todo a **3,3 V**, nunca a 5 V: el ESP32 no aguanta 5 V en sus pines.
+
+**Paso 2: un AS5600 solo** (sin el multiplexor)
+
+| ESP32 | AS5600 |
+|---|---|
+| 3V3 | VCC |
+| GND | GND |
+| GPIO21 | SDA |
+| GPIO22 | SCL |
+| GND | DIR |
+| — | OUT y GPO, sin conectar |
+
+**DIR va a GND, no al aire.** Al aire, el sentido de giro del sensor puede
+cambiar solo. Y los cuatro sensores del robot, con DIR igual: el espejado de
+FL y RR lo hace el software.
+
+El imán tiene que ser de **magnetización diametral** (los polos a los lados,
+no arriba y abajo), centrado sobre el chip y a unos 0,5–3 mm.
+
+**Paso 3: el multiplexor solo**
+
+| ESP32 | TCA9548A |
+|---|---|
+| 3V3 | VIN |
+| GND | GND |
+| GPIO21 | SDA |
+| GPIO22 | SCL |
+| GND | A0, A1 y A2 (dirección 0x70) |
+| 3V3 | RST, si el módulo no lo trae ya a 3,3 V |
+
+Con RST al aire, el chip se resetea solo de vez en cuando y los encoders
+"desaparecen" a ratos. `test_tca9548a` lo detecta.
+
+**Paso 4: el multiplexor con un encoder**
+
+El montaje del paso 3, y el AS5600 en un canal:
+
+| TCA9548A | AS5600 |
+|---|---|
+| SD0 | SDA |
+| SC0 | SCL |
+
+Y el AS5600 con VCC a 3V3, GND a GND y DIR a GND, como en el paso 2.
+Después se pasa al canal 1, al 2 y al 3, y se repite: cada canal se prueba
+con un sensor que ya sabes que funciona.
+
+Cada canal necesita sus propias resistencias de **pull-up** (4,7 kΩ de SDx y
+SCx a 3,3 V). Muchos módulos AS5600 las llevan. Si el tuyo no, el canal no
+funciona aunque el multiplexor esté bien.
+
+**Paso 5, el robot**: canal 0 = FR, 1 = FL, 2 = RR, 3 = RL. La IMU va
+directa al bus principal, sin pasar por el multiplexor.
+
+### Lo que tiene que salir
+
+| Paso | Bien | Si no |
+|---|---|---|
+| 1 | SDA y SCL con pull-up; 0x70 (mux) y 0x68 (IMU); ningún 0x36 con el mux cerrado | Un 0x36 en el bus principal es un sensor conectado sin pasar por el mux |
+| 2 | Imán `ok`, ruido de menos de 10 cuentas, las 64 zonas de la vuelta, ganancia estable | Imán débil o fuerte: distancia. Ganancia que baila en la vuelta: imán descentrado |
+| 3 | Responde en 0x70, el registro guarda lo que se escribe, no se resetea | En 0x71–0x77: A0–A2 no están a GND. Se resetea: RST |
+| 4 | El AS5600 aparece en un canal y solo en ese | Contesta pero falla al leer: pull-ups del canal |
+| 5 | Los cuatro responden, cada brazo en su sentido (`u`), offsets entre −85° y +85° | Un offset fuera de ±85°: imán girado (ver el aviso del asistente) |
+
+### El salto de 360°
+
+El firmware calcula el ángulo como `crudo × 0,088 + offset`, **sin dar la
+vuelta** a los 360°. Funciona mientras el salto del sensor (de 4095 a 0)
+caiga fuera del recorrido del brazo, que va de 85° a 275°: o sea, con
+offsets entre −85° y +85°. Si un imán se monta girado, el asistente de
+offsets da un número más grande y el ángulo de esa oruga saltaría 360° en
+mitad del movimiento. El asistente avisa; el arreglo de fondo es la #28.
+
+Cada paso tiene su issue, colgando de la #1: #24 (bus), #25 (un encoder),
+#26 (multiplexor solo) y #27 (multiplexor con un encoder).
 
 ---
 
