@@ -11,6 +11,8 @@ starcrawler_sim:
 
     # Como el config.h de la app de micro-ROS: WATCHDOG_TIMEOUT_MS y
     # VEL_MAX_DPS. Con otros valores el simulador deja de parecerse al robot.
+    # robot.launch.py cambia vel_max_dps por su vel_sim_dps (80 por defecto):
+    # este 40 solo vale lanzando sim_node a mano.
     watchdog_s: 0.3
     vel_max_dps: 40.0
 

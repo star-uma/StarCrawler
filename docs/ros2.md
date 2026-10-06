@@ -231,8 +231,10 @@ Hay **dos simuladores**, y sirven para cosas distintas.
 `starcrawler_sim` sustituye al robot entero: publica los mismos tópicos que
 publicará el ESP32 con micro-ROS, así que el resto del grafo no distingue si
 hay hardware o no. Por dentro imita a la app del ESP32: lazo de 100 Hz,
-saturación a 40 dps, watchdog de 300 ms, histéresis de posición, la rampa de
-los steppers y encoders de 12 bits. Marca el bit 7 de `error_bits` (hardware
+saturación (`vel_sim_dps`, 80 dps por defecto: el doble que el firmware; con
+`vel_sim_dps:=40` va como el ESP32), watchdog de 300 ms, histéresis de
+posición, la rampa de los steppers y encoders de 12 bits. El mando y la web
+escalan su velocidad máxima a ese tope. Marca el bit 7 de `error_bits` (hardware
 simulado).
 
 ```bash

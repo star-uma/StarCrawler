@@ -36,7 +36,7 @@ contrastarlo con el código.
 | Cosa | Estado |
 |---|---|
 | Workspace `ros2_ws/` | Verificado: `colcon build` limpio y 127/127 tests (28-09, WSL Ubuntu 22.04 + Humble). Los tests de lint se declaran pero no corren |
-| Robot simulado | Verificado: sim → odometría → GUI en `:8000` (22-09). Desde el 28-09 imita al firmware de micro-ROS (40 dps, watchdog de 300 ms, histéresis 1/0,5°, rampa de la ISR, encoders de 12 bits): el mismo guion de mando da los mismos ángulos que el ESP32 con `HW_SIMULADO` |
+| Robot simulado | Verificado: sim → odometría → GUI en `:8000` (22-09). Desde el 28-09 imita al firmware de micro-ROS (40 dps con `vel_sim_dps:=40`; desde el 06-10 el tope por defecto en simulación es 80, watchdog de 300 ms, histéresis 1/0,5°, rampa de la ISR, encoders de 12 bits): el mismo guion de mando da los mismos ángulos que el ESP32 con `HW_SIMULADO` |
 | ESP32 con `HW_SIMULADO` | Verificado (28-09): el firmware real en el ESP32 del banco con la planta simulada dentro, contra el grafo entero y un mando por UDP. Ver el README de la app |
 | App de micro-ROS | Verificado con un ESP32 **sin nada conectado** (22-09): sesión con el agente, `error_bits` 111 (encoders + CAN + watchdog), ~49 Hz a 921600, reconexión en 5 s si el agente se reinicia. ESP-IDF **4.1** (la de `micro_ros_setup` humble), con `idf_compat.h` |
 | GUI y odometría con el ESP32 | Verificado (24-09) contra el ESP32 real: una suscripción fiable recibe 0 mensajes (rclpy avisa `incompatible policy: RELIABILITY`) y una best-effort ~50 Hz; odometría y GUI están en best-effort y la GUI marca `fuente: ros2 · 50 paq/s` sin simulador. **`ros2 topic echo /odom` no sirve para comprobarlo**: la odometría publica por temporizador aunque no le llegue estado |
