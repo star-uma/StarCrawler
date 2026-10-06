@@ -88,14 +88,43 @@ def test_un_brazo_levantado_no_se_levanta_mas():
     assert q[FR] < 0.3
 
 
-def test_encoder_caido_no_rompe_los_demas():
+def test_encoder_caido_da_objetivo_finito_y_no_rompe_los_demas():
     n = Nivelador()
-    q = correr(n, 10 * GRADO, 0.0, [float('nan'), 0.0, 0.0, 0.0], 1.0)
-    assert math.isnan(q[FR]) and q[FL] < 0
+    medidas = [float('nan'), 0.0, 0.0, 0.0]
+    for _ in range(50):
+        q = n.paso(10 * GRADO, 0.0, medidas, 0.02)
+        # El firmware descarta la orden entera si un objetivo no es finito
+        assert all(math.isfinite(v) for v in q)
+    assert q[FR] == 0.0 and q[FL] < 0
+
+
+def test_encoder_caido_se_queda_en_su_ultima_medida():
+    n = Nivelador()
+    n.paso(10 * GRADO, 0.0, [-0.2, 0.0, 0.0, 0.0], 0.02)
+    q = n.paso(10 * GRADO, 0.0, [float('nan'), 0.0, 0.0, 0.0], 0.02)
+    assert q[FR] == pytest.approx(-0.2)
 
 
 def test_vuelve_el_encoder_y_se_parte_de_la_medida():
     n = Nivelador()
-    correr(n, 10 * GRADO, 0.0, [float('nan'), 0.0, 0.0, 0.0], 0.5)
+    for _ in range(25):
+        n.paso(10 * GRADO, 0.0, [float('nan'), 0.0, 0.0, 0.0], 0.02)
     q = n.paso(10 * GRADO, 0.0, [0.2, 0.0, 0.0, 0.0], 0.02)
     assert 0.0 < q[FR] < 0.2
+
+
+def test_brazo_por_debajo_de_la_cota_ni_sube_ni_baja():
+    q = Nivelador().paso(20 * GRADO, 0.0, [math.radians(-75), 0.0, 0.0, 0.0], 0.02)
+    assert q[FR] == pytest.approx(math.radians(-75))
+
+
+def test_primero_recoge_y_tras_la_cuesta_vuelve_a_horizontal():
+    n = Nivelador()
+    # Subiendo (morro arriba) bajan las traseras
+    q = correr(n, -10 * GRADO, 0.0, [0.0] * 4, 5.0)
+    assert q[RR] < -0.2 and q[RL] < -0.2
+    # Arriba, el chasis queda morro abajo: primero recoge las traseras
+    q = n.paso(5 * GRADO, 0.0, q, 0.02)
+    assert q[FR] == 0.0 and q[FL] == 0.0
+    q = correr(n, 5 * GRADO, 0.0, q, 10.0)
+    assert q[RR] == 0.0 and q[RL] == 0.0

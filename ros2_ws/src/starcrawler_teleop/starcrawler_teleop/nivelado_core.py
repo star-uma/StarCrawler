@@ -6,6 +6,8 @@ esquina y mueve los brazos: la esquina que queda baja baja su brazo (empuja el
 chasis hacia arriba) y la que queda alta recoge su brazo si estaba empujando.
 Un brazo nunca se levanta por encima de horizontal para nivelar: levantar un
 brazo que no apoya no baja esa esquina, la sostiene la polea del pivote.
+Mientras alguna esquina alta tenga su brazo empujando, se recoge ese antes
+de bajar otro: asi, pasada la cuesta, los brazos vuelven a horizontal.
 
 Convenios (REP-103, los del URDF): cabeceo + = morro abajo, balanceo + = lado
 izquierdo arriba, elevacion + = brazo levantado. Orden {FR, FL, RR, RL}.
@@ -61,6 +63,7 @@ class Nivelador:
     def __init__(self, ajustes: Optional[AjustesNivelado] = None) -> None:
         self.a = ajustes or AjustesNivelado()
         self.objetivo: Optional[List[float]] = None
+        self._ultima = [0.0] * N_ORUGAS     # ultima medida buena de cada brazo
 
     @property
     def activo(self) -> bool:
@@ -74,33 +77,45 @@ class Nivelador:
 
     def paso(self, cabeceo: float, balanceo: float,
              medidas: Sequence[float], dt: float) -> List[float]:
+        """Objetivos de los brazos, siempre finitos: el firmware descarta la
+        orden ENTERA si un objetivo no lo es, y salta su watchdog."""
         a = self.a
         if self.objetivo is None:
             self.empezar(medidas)
         dt = max(0.0, min(dt, 0.2))
         inclinado = max(abs(cabeceo), abs(balanceo)) > a.zona_muerta
-        for i, e in enumerate(desniveles(cabeceo, balanceo, a)):
+        des = desniveles(cabeceo, balanceo, a)
+        # Primero se recogen los brazos que empujan en una esquina alta: si
+        # no, tras una cuesta los brazos nunca vuelven a horizontal
+        recoger = inclinado and any(
+            e > 0.0 and math.isfinite(self.objetivo[i]) and self.objetivo[i] < 0.0
+            for i, e in enumerate(des))
+        for i, e in enumerate(des):
             q = self.objetivo[i]
             m = float(medidas[i])
             if not math.isfinite(m):
-                # Sin encoder no se sabe donde esta: ese brazo no se toca
-                # (NaN en el objetivo: el firmware lo descarta)
+                # Sin encoder no se sabe donde esta: NaN por dentro, y fuera
+                # su ultima medida (el firmware no mueve un brazo sin encoder)
                 self.objetivo[i] = float('nan')
                 continue
+            self._ultima[i] = m
             if not math.isfinite(q):
                 q = m                       # vuelve el encoder: desde la medida
             v = 0.0
             if inclinado:
-                if e < 0.0:
+                if e < 0.0 and not recoger:
                     v = a.ganancia * e                # esquina baja: bajar el brazo
-                elif q < 0.0:
+                elif e > 0.0 and q < 0.0:
                     v = a.ganancia * e                # alta y empujando: recoger
             v = max(-a.vel_max, min(a.vel_max, v))
             q_nuevo = q + v * dt
             if q < 0.0 <= q_nuevo and v > 0.0:
                 q_nuevo = 0.0                         # recoger, hasta horizontal
-            q_nuevo = max(a.bajada_max, min(max(q, 0.0), q_nuevo))
             # Que el objetivo no se escape de la medida si el brazo no llega
             q_nuevo = max(m - a.adelanto_max, min(m + a.adelanto_max, q_nuevo))
+            # Nunca levantar por encima de max(q, 0) ni bajar de la cota; un
+            # brazo que ya estaba por debajo de la cota no se sube ni se baja
+            q_nuevo = max(min(a.bajada_max, q), min(max(q, 0.0), q_nuevo))
             self.objetivo[i] = q_nuevo
-        return list(self.objetivo)
+        return [q if math.isfinite(q) else self._ultima[i]
+                for i, q in enumerate(self.objetivo)]

@@ -388,3 +388,30 @@ def test_tocar_los_brazos_apaga_el_nivelado():
     lg.procesar(ejes(), botones(), 0.1)
     lg.procesar(ejes(), botones(4), 0.2)                         # L1
     assert not lg.procesar(ejes(), botones(), 0.3).nivelar
+
+
+def test_encender_el_nivelado_olvida_la_pose():
+    lg = logica()
+    for k in range(40):                                          # triangulo 0,8 s
+        lg.procesar(ejes(), botones(2), k * 0.02)
+    assert lg.procesar(ejes(), botones(), 0.9).usar_posicion
+    s = lg.procesar(ejes(), botones(9), 1.0)                     # OPTIONS: activa
+    assert s.nivelar and not s.usar_posicion
+    lg.procesar(ejes(), botones(), 1.1)
+    s = lg.procesar(ejes(), botones(9), 1.2)                     # OPTIONS: apaga
+    assert not s.nivelar and not s.usar_posicion and not any(s.incremento)
+
+
+def test_apagar_nivelado():
+    lg = logica()
+    lg.procesar(ejes(), botones(9), 0.0)
+    lg.apagar_nivelado()
+    assert not lg.procesar(ejes(), botones(), 0.1).nivelar
+
+
+def test_options_con_hombre_muerto_suelto_no_cambia_el_nivelado():
+    lg = logica()
+    lg.mapeo.boton_enable = 12                                   # R3 de hombre muerto
+    lg.procesar(ejes(), botones(9), 0.0)                         # OPTIONS sin R1
+    lg.procesar(ejes(), botones(), 0.1)
+    assert not lg.procesar(ejes(), botones(12), 0.2).nivelar

@@ -198,10 +198,9 @@ class LogicaMando:
         self._l3_anterior = l3
         out.velocidad_lenta = self.velocidad_lenta
 
-        # Toggle del nivelado (flanco de OPTIONS)
+        # Flanco de OPTIONS: se apunta siempre, se aplica tras el hombre muerto
         opt = self._boton(botones, m.boton_options)
-        if opt and not self._options_anterior:
-            self.nivelado = not self.nivelado
+        flanco_options = opt and not self._options_anterior
         self._options_anterior = opt
 
         # Parada de emergencia: manda sobre todo
@@ -216,6 +215,12 @@ class LogicaMando:
         if m.boton_enable >= 0 and not self._boton(botones, m.boton_enable):
             out.activo = self._marcar_activo(False, t)
             return out
+
+        # Nivelado (OPTIONS): al encenderlo manda el, la pose enganchada se olvida
+        if flanco_options:
+            self.nivelado = not self.nivelado
+            if self.nivelado:
+                self.cancelar_preset()
 
         # Traccion (siempre activa)
         av = deadzone(self._eje(ejes, m.eje_avance), a.zona_muerta)
@@ -275,6 +280,10 @@ class LogicaMando:
                   or any(cruceta) or pulsado >= 0)
         out.activo = self._marcar_activo(tocado, t)
         return out
+
+    def apagar_nivelado(self) -> None:
+        """Mando perdido u otra fuente al mando: el nivelado no vuelve solo."""
+        self.nivelado = False
 
     def _marcar_activo(self, tocado: bool, t: float) -> bool:
         if tocado:
