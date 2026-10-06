@@ -365,3 +365,26 @@ def test_deadman_suelto_no_activa_salvo_share():
     lg = LogicaMando(m, Ajustes())
     assert not lg.procesar(ejes(a1=-1.0), botones(4), 0.0).activo
     assert lg.procesar(ejes(), botones(8), 1.0).activo
+
+
+def test_options_es_un_interruptor():
+    lg = logica()
+    assert lg.procesar(ejes(), botones(9), 0.0).nivelar          # pulsar: activa
+    assert lg.procesar(ejes(), botones(), 0.1).nivelar           # soltar: sigue
+    assert not lg.procesar(ejes(), botones(9), 0.2).nivelar      # pulsar: apaga
+
+
+def test_share_apaga_el_nivelado():
+    lg = logica()
+    lg.procesar(ejes(), botones(9), 0.0)
+    lg.procesar(ejes(), botones(), 0.1)
+    lg.procesar(ejes(), botones(8), 0.2)
+    assert not lg.procesar(ejes(), botones(), 0.3).nivelar
+
+
+def test_tocar_los_brazos_apaga_el_nivelado():
+    lg = logica()
+    lg.procesar(ejes(), botones(9), 0.0)
+    lg.procesar(ejes(), botones(), 0.1)
+    lg.procesar(ejes(), botones(4), 0.2)                         # L1
+    assert not lg.procesar(ejes(), botones(), 0.3).nivelar

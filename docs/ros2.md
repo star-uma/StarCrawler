@@ -450,7 +450,7 @@ superpuestas.
 | ✕ ○ □ △ (mantener 0.5 s) | Poses: −45° / 0° / +45° / +90° de elevación |
 | **SHARE** | **Parada de emergencia** |
 | L3 | Velocidad lenta (×0.5) / rápida |
-| OPTIONS | Reservado (nivelado, requiere IMU) |
+| OPTIONS | Nivelado automático: activa / desactiva. Lee `/imu/data`; en simulación la da el mundo. Lo apagan SHARE, tocar los brazos o una pose |
 
 ### Mando desde la web (`gui_mando:=true`)
 
@@ -571,9 +571,10 @@ si el cable USB da problemas, se ve en `frames_crc_error`.
 
 **Siguientes pasos naturales:**
 
-1. **IMU en el PC** (USB/I2C) + `imu_filter_madgwick` → recuperar el modo de
-   nivelado automático del TFG en el lado ROS. Con PC a bordo es mejor que
-   colgarla del ESP32.
+1. **IMU en el PC** (USB/I2C) + `imu_filter_madgwick` publicando `/imu/data`.
+   El nivelado automático ya está en el teleop (OPTIONS, `nivelado_core.py`) y
+   en simulación lo alimenta el mundo; solo falta la IMU real. Con PC a bordo
+   es mejor que colgarla del ESP32.
 2. **`ros2_control`**: sustituir el nodo driver por un `SystemInterface`, con
    `diff_drive_controller` (odometría estándar) y `position_controllers` para
    las orugas.

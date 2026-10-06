@@ -31,7 +31,7 @@ starcrawler_teleop:
     # Otros
     boton_l3: 11               # clic stick izq: velocidad lenta/rapida
     boton_share: 8             # PARADA DE EMERGENCIA
-    boton_options: 9           # reservado (nivelado con IMU)
+    boton_options: 9           # nivelado automatico (activa / desactiva)
     botones_preset: [0, 1, 3, 2]   # X, O, [], T -> -45, 0, +45, +90 deg
     boton_enable: -1           # deadman opcional (-1 = desactivado)
 

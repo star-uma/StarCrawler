@@ -117,6 +117,7 @@ class NodoFisica(NodoMundo):
                                      p.cabeceo, p.balanceo])
         self.publicar_verdad(sello, p, e.avance / dt if dt > 0.0 else 0.0,
                              giro / dt if dt > 0.0 else 0.0)
+        self.publicar_imu(sello, p)
         self.ticks += 1
         if self.ticks % self.cada == 0:
             self.publicar_estado(sello, v)

@@ -11,7 +11,7 @@ la traccion esta SIEMPRE activa y las orugas se mueven superpuestas.
     X / O / [] / T (mantener) .............. presets de pose
     SHARE .................................. parada de emergencia
     L3 ..................................... velocidad lenta / rapida
-    OPTIONS ................................ (reservado: nivelado con IMU)
+    OPTIONS ................................ nivelado automatico (activa / desactiva)
 
 Modulo PURO: no importa rclpy. Probado en test/test_joy_logic.py.
 
@@ -134,6 +134,8 @@ class LogicaMando:
         self.ajustes = ajustes or Ajustes()
         self.velocidad_lenta = False
         self._l3_anterior = False
+        self.nivelado = False
+        self._options_anterior = False
         self._preset_pulsado = -1
         self._t_preset = 0.0
         self._posicion_vigente = False
@@ -196,9 +198,16 @@ class LogicaMando:
         self._l3_anterior = l3
         out.velocidad_lenta = self.velocidad_lenta
 
+        # Toggle del nivelado (flanco de OPTIONS)
+        opt = self._boton(botones, m.boton_options)
+        if opt and not self._options_anterior:
+            self.nivelado = not self.nivelado
+        self._options_anterior = opt
+
         # Parada de emergencia: manda sobre todo
         if self._boton(botones, m.boton_share):
             self.cancelar_preset()
+            self.nivelado = False
             out.emergencia = True
             out.activo = self._marcar_activo(True, t)
             return out
@@ -234,6 +243,7 @@ class LogicaMando:
         hay_manual = sentido_del != 0 or sentido_tra != 0 or any(inclinar)
         if hay_manual:
             self._posicion_vigente = False
+            self.nivelado = False           # el que toca los brazos manda
 
         # Presets de pose: mantener el boton s_preset segundos
         pulsado = -1
@@ -249,6 +259,7 @@ class LogicaMando:
                 self._t_preset = t
             elif t - self._t_preset >= a.s_preset:
                 self._posicion_vigente = True
+                self.nivelado = False
                 objetivo = math.radians(PRESETS_DEG[pulsado])
                 self._objetivo_rad = [objetivo] * N_ORUGAS
 
@@ -257,7 +268,7 @@ class LogicaMando:
             out.objetivo_rad = list(self._objetivo_rad)
             out.incremento = [0] * N_ORUGAS
 
-        out.nivelar = self._boton(botones, m.boton_options)
+        out.nivelar = self.nivelado
 
         # L3, OPTIONS y la pose ya enganchada no cuentan como tocar el mando
         tocado = (av != 0.0 or gi != 0.0 or l1 or l2 or r1 or r2

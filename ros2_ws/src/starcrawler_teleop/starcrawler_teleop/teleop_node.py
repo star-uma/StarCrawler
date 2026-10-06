@@ -9,6 +9,9 @@ Lee /joy (nodo `joy`, mando conectado al PC de a bordo) y publica:
     cmd_vel_activo           lo mismo, solo mientras el DS4 esta tocado
     crawler/command_activo   (Salida.activo)
 
+Con el nivelado activo (OPTIONS) lee tambien /imu/data y /starcrawler/state y
+manda los brazos a la posicion que calcula nivelado_core.
+
 Los nombres son relativos: el launch los remapea a las fuentes joy y
 joy_activo de twist_mux y crawler_mux.
 
@@ -25,12 +28,16 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile
-from sensor_msgs.msg import Joy
+from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
+from sensor_msgs.msg import Imu, Joy
 from std_msgs.msg import String
-from starcrawler_msgs.msg import CrawlerCommand
+from starcrawler_msgs.msg import CrawlerCommand, RobotState
 
 from .joy_logic import Ajustes, LogicaMando, Mapeo, N_ORUGAS
+from .nivelado_core import AjustesNivelado, Nivelador, cabeceo_balanceo
+
+# Mas viejos que esto, la IMU o el estado no valen para nivelar
+FRESCURA_NIVELADO_S = 0.3
 
 
 class StarCrawlerTeleop(Node):
@@ -80,12 +87,27 @@ class StarCrawlerTeleop(Node):
         self.fuentes_propias = set(
             self.get_parameter('fuentes_propias').value)
 
+        n = AjustesNivelado()
+        for campo, valor in (('pivote_x', n.pivote_x), ('pivote_y', n.pivote_y),
+                             ('ganancia_nivelado', n.ganancia)):
+            self.declare_parameter(campo, valor)
+        n.pivote_x = float(self.get_parameter('pivote_x').value)
+        n.pivote_y = float(self.get_parameter('pivote_y').value)
+        n.ganancia = float(self.get_parameter('ganancia_nivelado').value)
+        self.nivelador = Nivelador(n)
+        self.imu = None             # (cabeceo, balanceo, t)
+        self.brazos = None          # (elevaciones rad, t)
+        self.t_nivelado = None
+
         self.logica = LogicaMando(m, a)
         self.joy: Joy | None = None
         self.t_joy = 0.0
         self.aviso_dado = False
 
         self.create_subscription(Joy, 'joy', self.cb_joy, 10)
+        self.create_subscription(Imu, 'imu/data', self.cb_imu, qos_profile_sensor_data)
+        self.create_subscription(RobotState, 'starcrawler/state', self.cb_estado,
+                                 qos_profile_sensor_data)
         # crawler_mux la publica latcheada y solo al cambiar
         self.create_subscription(
             String, 'crawler_mux/activa', self.cb_activa,
@@ -109,6 +131,32 @@ class StarCrawlerTeleop(Node):
         self.joy = msg
         self.t_joy = self.ahora()
         self.aviso_dado = False
+
+    def cb_imu(self, msg: Imu) -> None:
+        o = msg.orientation
+        self.imu = (*cabeceo_balanceo(o.x, o.y, o.z, o.w), self.ahora())
+
+    def cb_estado(self, msg: RobotState) -> None:
+        # crawler_angle ya viene en radianes de elevacion; NaN si no hay encoder
+        q = [float(msg.crawler_angle[i]) if msg.encoder_ok[i] else float('nan')
+             for i in range(N_ORUGAS)]
+        self.brazos = (q, self.ahora())
+
+    def nivelar(self, t: float):
+        """Objetivos de los brazos para nivelar, o None si falta la IMU o el
+        estado (entonces los brazos se quedan donde esten)."""
+        if (self.imu is None or self.brazos is None
+                or t - self.imu[2] > FRESCURA_NIVELADO_S
+                or t - self.brazos[1] > FRESCURA_NIVELADO_S):
+            self.get_logger().warn('Nivelado sin IMU (/imu/data) o sin estado '
+                                   'de los brazos: no nivelo',
+                                   throttle_duration_sec=5.0)
+            self.nivelador.parar()
+            return None
+        dt = 0.0 if self.t_nivelado is None else t - self.t_nivelado
+        self.t_nivelado = t
+        cabeceo, balanceo, _ = self.imu
+        return self.nivelador.paso(cabeceo, balanceo, self.brazos[0], dt)
 
     def cb_activa(self, msg: String) -> None:
         # Si ha mandado otra fuente, la pose del DS4 no vuelve al soltarla
@@ -149,6 +197,15 @@ class StarCrawlerTeleop(Node):
         cmd.use_position = s.usar_posicion
         cmd.target = [float(v) for v in s.objetivo_rad]
         cmd.emergency_stop = s.emergencia
+
+        objetivo = self.nivelar(t) if s.nivelar and not s.emergencia else None
+        if objetivo is not None:
+            cmd.increment = [0] * N_ORUGAS
+            cmd.use_position = True
+            cmd.target = [float(v) for v in objetivo]
+        elif not s.nivelar and self.nivelador.activo:
+            self.nivelador.parar()
+            self.t_nivelado = None
 
         self.pub_vel.publish(vel)
         self.pub_crawler.publish(cmd)

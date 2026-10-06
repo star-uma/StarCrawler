@@ -38,7 +38,7 @@ from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import (PoseWithCovarianceStamped, Quaternion,
                                TransformStamped)
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import MarkerArray
@@ -56,6 +56,7 @@ DT_MAX_S = 0.1
 AVISO_MS = 15.0
 ESTADO_HZ = 10.0
 MARCO_CHASIS = 'base_link'
+MARCO_IMU = 'imu_link'
 
 
 class MundoVacio:
@@ -130,6 +131,8 @@ class NodoMundo(Node):
             MarkerArray, 'mundo/indicadores', QoSProfile(depth=5))
         self.pub_estado = self.create_publisher(
             String, 'mundo/estado', QoSProfile(depth=10))
+        # La IMU que tendria el robot: orientacion del chasis y gravedad
+        self.pub_imu = self.create_publisher(Imu, 'imu/data', qos_profile_sensor_data)
 
         # El ESP32 publica en best-effort: una suscripcion fiable no casa
         self.create_subscription(
@@ -312,6 +315,7 @@ class NodoMundo(Node):
                                      p.cabeceo, p.balanceo])
         self.publicar_verdad(sello, p, avance / dt if dt > 0.0 else 0.0,
                              giro / dt if dt > 0.0 else 0.0)
+        self.publicar_imu(sello, p)
         self.ticks += 1
         if self.ticks % self.cada == 0:
             self.publicar_estado(sello, v)
@@ -349,6 +353,24 @@ class NodoMundo(Node):
         o.twist.twist.linear.x = float(v_real)
         o.twist.twist.angular.z = float(w_real)
         self.pub_verdad.publish(o)
+
+    def publicar_imu(self, sello, p):
+        # Con el robot real (espejo) la IMU es la suya: no inventarla
+        if self.modo == 'espejo':
+            return
+        imu = Imu()
+        imu.header.stamp = sello
+        imu.header.frame_id = MARCO_IMU
+        qx, qy, qz, qw = marcadores.cuaternion_zyx(p.yaw, p.cabeceo, p.balanceo)
+        imu.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
+        imu.orientation_covariance[0] = imu.orientation_covariance[4] = 1e-6
+        imu.orientation_covariance[8] = 1e-6
+        imu.angular_velocity_covariance[0] = -1.0     # no se da
+        g = 9.81
+        imu.linear_acceleration.x = -g * math.sin(p.cabeceo)
+        imu.linear_acceleration.y = g * math.cos(p.cabeceo) * math.sin(p.balanceo)
+        imu.linear_acceleration.z = g * math.cos(p.cabeceo) * math.cos(p.balanceo)
+        self.pub_imu.publish(imu)
 
     def publicar_estado(self, sello, v):
         e = self.estado
