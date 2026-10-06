@@ -25,6 +25,7 @@ Uso:
     ros2 launch starcrawler_bringup robot.launch.py port:=/dev/ttyUSB0 mundo:=rampa  # HW_SIMULADO
     ros2 launch starcrawler_bringup robot.launch.py sim:=true mundo:=escalera fisica:=true gui:=true  # MuJoCo
 """
+import math
 import os
 
 import yaml
@@ -47,6 +48,24 @@ def topes_del_mando():
         p = yaml.safe_load(f)['starcrawler_teleop']['ros__parameters']
     return {k: float(p[k])
             for k in ('max_lineal', 'max_angular', 'factor_lento', 's_preset')}
+
+
+def topes_de_velocidad(sim, vel_sim_dps):
+    """max_lineal y max_angular del mando y de la web. Con sim:=true salen del
+    tope del simulador (vel_sim_dps en la polea activa); sin el, los de
+    ds4.yaml, que son los 40 dps del firmware."""
+    topes = topes_del_mando()
+    g = geometria_de_la_odometria()
+    k_lineal = math.radians(1.0) * g['wheel_radius']           # m/s por dps
+    k_angular = 2.0 * k_lineal / g['track_separation']         # rad/s por dps
+    en_sim = ["'", sim, "'.lower() in ('true', '1')"]
+
+    def tope(k, defecto):
+        return ParameterValue(PythonExpression(
+            ["(%r * float('" % k, vel_sim_dps, "')) if "] + en_sim
+            + [' else %r' % defecto]), value_type=float)
+    return {'max_lineal': tope(k_lineal, topes['max_lineal']),
+            'max_angular': tope(k_angular, topes['max_angular'])}
 
 
 def geometria_de_la_odometria():
@@ -117,6 +136,11 @@ def generate_launch_description():
             description='Mundo con obstaculos para el robot simulado: nombre '
                         'en starcrawler_sim/mundos o ruta a un .yaml. Vacio = '
                         'como hasta ahora'),
+        DeclareLaunchArgument(
+            'vel_sim_dps', default_value='80',
+            description='Tope de las orugas con sim:=true, en dps de la polea '
+                        'activa (80 = 0,107 m/s). El robot real va con el '
+                        'del firmware (40)'),
         DeclareLaunchArgument(
             'fisica', default_value='false',
             description='Fisica de MuJoCo (fisica_node) en vez del contacto '
@@ -213,7 +237,9 @@ def generate_launch_description():
             name='starcrawler_sim',
             condition=IfCondition(sim),
             parameters=[PathJoinSubstitution(
-                [sim_share, 'config', 'sim.yaml'])],
+                [sim_share, 'config', 'sim.yaml']),
+                {'vel_max_dps': ParameterValue(
+                    LaunchConfiguration('vel_sim_dps'), value_type=float)}],
             output='screen',
         ),
         # Odometria de orugas. Separada del driver: se prueba y se
@@ -295,7 +321,8 @@ def generate_launch_description():
             name='starcrawler_teleop',
             condition=IfCondition(teleop),
             parameters=[
-                PathJoinSubstitution([teleop_share, 'config', 'ds4.yaml'])],
+                PathJoinSubstitution([teleop_share, 'config', 'ds4.yaml']),
+                topes_de_velocidad(sim, LaunchConfiguration('vel_sim_dps'))],
             # El mando entra a los muxes como dos fuentes: joy siempre (ceros
             # en reposo) y joy_activo solo mientras se toca (ver mux.yaml)
             remappings=[('cmd_vel', 'cmd_vel_joy'),
@@ -334,7 +361,8 @@ def generate_launch_description():
             executable='gui_node',
             name='starcrawler_gui',
             condition=IfCondition(con_gui),
-            parameters=[topes_del_mando(), {
+            parameters=[topes_del_mando(),
+                        topes_de_velocidad(sim, LaunchConfiguration('vel_sim_dps')), {
                 'mando': ParameterValue(gui_mando, value_type=bool),
                 'mando_token': ParameterValue(
                     LaunchConfiguration('gui_clave'), value_type=str),
