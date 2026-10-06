@@ -23,7 +23,9 @@ watchdog del ESP32 vean un flujo constante de consignas.
 """
 from __future__ import annotations
 
+import math
 import signal
+import time
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from geometry_msgs.msg import Twist
@@ -125,7 +127,9 @@ class StarCrawlerTeleop(Node):
             'Teleop listo (esquema simultaneo). SHARE = parada de emergencia.')
 
     def ahora(self) -> float:
-        return self.get_clock().now().nanoseconds * 1e-9
+        # Reloj monotono: el del sistema en el WSL da saltos de segundos cada
+        # ~35 s y haria creer que se ha perdido el mando (parada y sin pose)
+        return time.monotonic()
 
     def cb_joy(self, msg: Joy) -> None:
         self.joy = msg
@@ -141,6 +145,13 @@ class StarCrawlerTeleop(Node):
         q = [float(msg.crawler_angle[i]) if msg.encoder_ok[i] else float('nan')
              for i in range(N_ORUGAS)]
         self.brazos = (q, self.ahora())
+
+    def apagar_nivelado(self) -> None:
+        if self.logica.nivelado:
+            self.get_logger().info('Nivelado apagado: el mando ya no manda los brazos')
+        self.logica.apagar_nivelado()
+        self.nivelador.parar()
+        self.t_nivelado = None
 
     def nivelar(self, t: float):
         """Objetivos de los brazos para nivelar, o None si falta la IMU o el
@@ -162,6 +173,7 @@ class StarCrawlerTeleop(Node):
         # Si ha mandado otra fuente, la pose del DS4 no vuelve al soltarla
         if msg.data != '' and msg.data not in self.fuentes_propias:
             self.logica.cancelar_preset()
+            self.apagar_nivelado()
 
     def publicar(self) -> None:
         t = self.ahora()
@@ -183,6 +195,7 @@ class StarCrawlerTeleop(Node):
                 self.get_logger().warn('Sin datos de /joy: enviando parada.')
                 self.aviso_dado = True
             self.logica.cancelar_preset()
+            self.apagar_nivelado()
             cmd.increment = [0] * N_ORUGAS
             self.pub_vel.publish(vel)
             self.pub_crawler.publish(cmd)
@@ -199,7 +212,7 @@ class StarCrawlerTeleop(Node):
         cmd.emergency_stop = s.emergencia
 
         objetivo = self.nivelar(t) if s.nivelar and not s.emergencia else None
-        if objetivo is not None:
+        if objetivo is not None and all(math.isfinite(v) for v in objetivo):
             cmd.increment = [0] * N_ORUGAS
             cmd.use_position = True
             cmd.target = [float(v) for v in objetivo]
