@@ -176,12 +176,12 @@ def generate_launch_description():
 
     # Solo una fuente de estado a la vez, por prioridad: sim, simulate,
     # driver serie y, si nada de eso, micro-ROS
-    usar_driver = PythonExpression([
-        "'", sim, "' != 'true' and ('", simulate, "' == 'true' or '",
-        micro_ros, "' != 'true')"])
-    usar_agente = PythonExpression([
-        "'", sim, "' != 'true' and '", simulate, "' != 'true' and '",
-        micro_ros, "' == 'true'"])
+    usar_driver = PythonExpression(
+        ['not ('] + si(sim) + [') and (('] + si(simulate)
+        + [') or not ('] + si(micro_ros) + ['))'])
+    usar_agente = PythonExpression(
+        ['not ('] + si(sim) + [') and not ('] + si(simulate)
+        + [') and ('] + si(micro_ros) + [')'])
 
     robot_description = ParameterValue(
         Command(['xacro ', PathJoinSubstitution(
