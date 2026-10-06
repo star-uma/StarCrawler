@@ -84,6 +84,15 @@ def _solidos_mjcf(mundo) -> Tuple[str, str]:
         techos = [so.techo(x, y) for x, y in esquinas]
         if max(techos) < 0.002:
             continue
+        if so.bx == 0.0 and so.by == 0.0:
+            # Techo plano: una caja, mucho mas barata que una malla
+            alto = so.a + 0.01
+            geoms.append(
+                '<geom type="box" size="%.6g %.6g %.6g" pos="%.6g %.6g %.6g" '
+                'quat="%.6g 0 0 %.6g" class="terreno"/>'
+                % (so.largo / 2, so.ancho / 2, alto / 2, so.cx, so.cy,
+                   so.a - alto / 2, math.cos(so.rumbo / 2), math.sin(so.rumbo / 2)))
+            continue
         vertices = []
         for (x, y), z in zip(esquinas, techos):
             vertices += [x, y, -0.01, x, y, max(z, 0.001)]
@@ -145,7 +154,7 @@ def construir_mjcf(geo: GeometriaRobot, mundo, par: ParFisica = ParFisica()) -> 
     mallas, terreno = _solidos_mjcf(mundo)
     return """<mujoco model="starcrawler">
 <compiler angle="radian"/>
-<option timestep="%g" integrator="implicitfast" cone="elliptic" impratio="5"/>
+<option timestep="%g" integrator="implicitfast" cone="pyramidal"/>
 <default>
   <default class="terreno"><geom contype="1" conaffinity="2" friction="1 0.01 0.001"
     rgba="0.6 0.6 0.55 1"/></default>
