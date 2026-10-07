@@ -42,7 +42,7 @@
  * 2000 us -> unos 250 pasos por segundo. Con la reductora 1:80 eso son
  * ~2.8 grados/s en el brazo: se mueve despacio y hay que mirar con
  * calma para verlo. */
-#define SEMIPERIODO_STEP_US  2000
+#define SEMIPERIODO_STEP_US  1000
 
 /* Rampa de aceleracion (mismos valores que test_steppers_all).
  * Arrancar de golpe a la velocidad de regimen es la causa tipica de que

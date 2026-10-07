@@ -282,7 +282,7 @@ void vuelta() {
   Serial.println();
   Serial.println(F("=== UNA VUELTA COMPLETA ==="));
   Serial.println(F("  Gira el eje DESPACIO, al menos una vuelta entera, y"));
-  Serial.println(F("  pulsa Enter al acabar (maximo 30 s)."));
+  Serial.println(F("  pulsa Enter al acabar (maximo 2 min)."));
   Serial.println();
 
   bool visto[64];
@@ -296,7 +296,7 @@ void vuelta() {
   long recorrido = 0;
   int saltoMax = 0, perdidas = 0, fallos = 0;
   uint8_t agcMin = 255, agcMax = 0;
-  const unsigned long fin = millis() + 30000UL;
+  const unsigned long fin = millis() + 120000UL;
 
   while (!Serial.available() && millis() < fin) {
     uint16_t raw;
