@@ -49,6 +49,8 @@ hay que averiguar por qué.
 | `test_i2c_escaner` | ESP32 | El bus I2C: pull-ups, líneas en corto y qué responde en cada dirección. Ver [encoders, paso a paso](#encoders-paso-a-paso) |
 | `test_as5600_solo` | ESP32 | **Un** encoder sin multiplexor: imán, ganancia, ruido, una vuelta completa y sentido |
 | `test_tca9548a` | ESP32 | El multiplexor solo, y luego con un encoder canal a canal |
+| `test_rmd_detectar` | ESP32 | Qué motor RMD hay en el bus y leerlo todo (encoder, fases, PID) **sin moverlo**. Ver su README |
+| `rmd_uart/` | PC (Python) | Leer el encoder y probar la velocidad de un RMD por el **puerto serie de su placa**, sin ESP32. Ver su README |
 
 ### Orden recomendado
 
