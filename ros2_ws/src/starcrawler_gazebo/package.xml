@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>starcrawler_gazebo</name>
+  <version>0.1.0</version>
+  <description>
+    El robot y las arenas de starcrawler_sim en Gazebo Fortress: orugas como
+    cadenas de rodillos, brazos por posicion, IMU y pose verdadera. gazebo_node
+    hace de mundo_node con Gazebo como planta (robot.launch.py gazebo:=true).
+  </description>
+  <maintainer email="mariogj.03@uma.es">Mario Garcia Jimenez</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>starcrawler_sim</depend>
+  <depend>starcrawler_odometry</depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
