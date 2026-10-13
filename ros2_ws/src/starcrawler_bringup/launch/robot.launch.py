@@ -31,7 +31,7 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import (Command, LaunchConfiguration, PythonExpression,
                                   PathJoinSubstitution)
@@ -66,6 +66,37 @@ def topes_de_velocidad(sim, vel_sim_dps):
             + [' else %r' % defecto]), value_type=float)
     return {'max_lineal': tope(k_lineal, topes['max_lineal']),
             'max_angular': tope(k_angular, topes['max_angular'])}
+
+
+def lanzar_gazebo(contexto):
+    """Con gazebo:=true: genera el SDF del mundo (mismo YAML que MuJoCo) y
+    arranca Gazebo, el puente ros_gz y gazebo_node."""
+    def valor(nombre):
+        return LaunchConfiguration(nombre).perform(contexto)
+    if valor('gazebo').lower() not in ('true', '1'):
+        return []
+    import tempfile
+    import xacro
+    from starcrawler_gazebo import sdf_core
+    urdf = xacro.process_file(os.path.join(
+        get_package_share_directory('starcrawler_description'),
+        'urdf', 'starcrawler.urdf.xacro')).toxml()
+    mundo = valor('mundo') or 'llano'
+    ruta = sdf_core.generar(urdf, mundo, tempfile.mkdtemp(prefix='horu_gazebo_'))
+    gui = valor('gz_gui').lower() in ('true', '1')
+    return [
+        # Ogre 1: el Ogre 2 de Fortress se cae en el WSL (GL3PlusTextureGpu)
+        ExecuteProcess(cmd=['ign', 'gazebo', '-r', '--render-engine', 'ogre']
+                       + ([] if gui else ['-s']) + [ruta], output='screen'),
+        Node(package='ros_gz_bridge', executable='parameter_bridge',
+             name='puente_gazebo', arguments=sdf_core.puentes(),
+             remappings=[(sdf_core.TOPICO_IMU, '/imu/data')], output='screen'),
+        Node(package='starcrawler_gazebo', executable='gazebo_node',
+             name='starcrawler_mundo',
+             parameters=[{'mundo': mundo, 'recargar_auto': False,
+                          **geometria_de_la_odometria()}],
+             output='screen'),
+    ]
 
 
 def geometria_de_la_odometria():
@@ -148,6 +179,13 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'visor', default_value='false',
             description='Con fisica:=true, abrir tambien el visor de MuJoCo'),
+        DeclareLaunchArgument(
+            'gazebo', default_value='false',
+            description='Gazebo Fortress como planta (starcrawler_gazebo) en vez '
+                        'de MuJoCo o el contacto cuasiestatico. Sin mundo:=, en llano'),
+        DeclareLaunchArgument(
+            'gz_gui', default_value='true',
+            description='Con gazebo:=true, abrir la ventana de Gazebo'),
     ]
 
     simulate = LaunchConfiguration('simulate')
@@ -160,9 +198,11 @@ def generate_launch_description():
     mux_yaml = PathJoinSubstitution([teleop_share, 'config', 'mux.yaml'])
 
     # Con mundo, mundo_node publica la pose verdadera (TF y juntas del chasis)
+    gazebo = PythonExpression([
+        "'", LaunchConfiguration('gazebo'), "'.lower() in ('true', '1')"])
     fisica = PythonExpression([
-        "'", LaunchConfiguration('fisica'), "'.lower() in ('true', '1')"])
-    con_mundo = PythonExpression(["'", mundo, "' != '' or ", fisica])
+        "'", LaunchConfiguration('fisica'), "'.lower() in ('true', '1') and not ", gazebo])
+    con_mundo = PythonExpression(["'", mundo, "' != '' or ", fisica, " or ", gazebo])
     sin_mundo = PythonExpression(["not (", con_mundo, ")"])
 
     # Los muxes hacen falta con cualquier fuente de consignas. Como
@@ -273,7 +313,7 @@ def generate_launch_description():
             executable='mundo_node',
             name='starcrawler_mundo',
             condition=IfCondition(PythonExpression(
-                ["'", mundo, "' != '' and not ", fisica])),
+                ["'", mundo, "' != '' and not ", fisica, " and not ", gazebo])),
             parameters=[{'mundo': ParameterValue(mundo, value_type=str),
                          **geometria_de_la_odometria()}],
             output='screen',
@@ -382,4 +422,4 @@ def generate_launch_description():
         ),
     ]
 
-    return LaunchDescription(args + nodos)
+    return LaunchDescription(args + nodos + [OpaqueFunction(function=lanzar_gazebo)])
