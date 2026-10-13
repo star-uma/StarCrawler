@@ -291,6 +291,36 @@ Sin `mundo:=` va en llano. Los parámetros (rozamiento 0,9, 350 N por oruga, 200
 N·m en el brazo) son estimaciones en `fisica_core.ParFisica`: pendientes de
 medir, igual que las cotas del URDF.
 
+### Gazebo Fortress (`gazebo:=true`)
+
+Lo mismo que `fisica:=true` pero con Gazebo como planta (paquete
+`starcrawler_gazebo`): las mismas arenas (`mundos/*.yaml`) y el mismo
+grafo, así que el mando, la web, RViz y el nivelado funcionan igual. Es la
+base para simular más adelante el LiDAR y las cámaras.
+
+```bash
+sudo apt install ros-humble-ros-gz            # una vez (Gazebo Fortress)
+ros2 launch starcrawler_bringup robot.launch.py sim:=true gazebo:=true mundo:=practica_rrl gui:=true joy_udp:=true
+ros2 launch starcrawler_bringup robot.launch.py sim:=true gazebo:=true gz_gui:=false   # sin ventana
+```
+
+Cómo está hecho y por qué:
+
+- **Orugas como cadenas de rodillos** movidos por `JointController`. El
+  `TrackController` de Gazebo no mueve nada con el DART de Ubuntu (le faltan
+  los parches de Gazebo; tampoco se mueve el ejemplo `tracked_vehicle_simple`).
+- **Rozamiento de los rodillos anisótropo** (0,9 a lo largo, 0,6 de lado):
+  DART reparte el rozamiento en dos direcciones independientes y, con el mismo
+  valor en las dos, el robot no gira en parado. Con 0,6 gira al 90 % de lo
+  pedido; con 0,75 ya no gira. Ajustarlo cuando se mida el giro del robot real.
+- **Rampas como cajas giradas**, no mallas: el ODE de DART se cae al cargar
+  una malla.
+- **Ventana con Ogre 1** (`--render-engine ogre`): el Ogre 2 se cae en el WSL.
+- Brazos por par con un PID duro; IMU de Gazebo en `/imu/data`.
+
+Medido: avanza a lo pedido (0,107 m/s), Gazebo va a ~99 % del tiempo real en
+llano y en la rampa con nivelado el chasis no pasa de 6°.
+
 ### El ESP32 real con la planta simulada (`HW_SIMULADO`)
 
 A medio camino: el firmware de micro-ROS de verdad, en el ESP32 de verdad,
