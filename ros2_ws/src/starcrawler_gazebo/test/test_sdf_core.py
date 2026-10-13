@@ -46,14 +46,16 @@ def test_topicos_de_ros_validos():
 def test_la_rampa_es_una_caja_con_el_techo_en_su_plano(tmp_path):
     m = mundo('rampa')
     texto = sdf_core.mundo_sdf(m, GEO, str(tmp_path))
-    assert '<mesh>' not in texto            # el ODE de DART se cae con mallas
     raiz = ET.fromstring(texto)
+    # Mallas solo para pintar: en un choque, el ODE de DART se cae al cargarlas
+    assert not [c for c in raiz.iter('collision') if c.find('.//mesh') is not None]
+    assert [v for v in raiz.iter('visual') if v.find('.//mesh') is not None]
     terreno = [x for x in raiz.iter('model') if x.get('name') == 'terreno'][0]
     inclinados = [so for so in m.solidos if so.bx or so.by]
     assert inclinados
     for so in inclinados:
         k = m.solidos.index(so)
-        eslabon = [e for e in terreno.iter('link') if e.get('name') == 's%d' % k][0]
+        eslabon = [e for e in terreno.iter('collision') if e.get('name') == 's%d' % k][0]
         x, y, z, rol, cab, rumbo = (float(v) for v in eslabon.findtext('pose').split())
         grosor = float(eslabon.find('.//box/size').text.split()[2])
         # Centro de la cara de arriba: centro + R(rol, cab, rumbo) (0, 0, grosor/2)
@@ -68,4 +70,4 @@ def test_la_rampa_es_una_caja_con_el_techo_en_su_plano(tmp_path):
 def test_la_pista_completa_genera(tmp_path):
     texto = sdf_core.mundo_sdf(mundo('practica_rrl'), GEO, str(tmp_path))
     ET.fromstring(texto)
-    assert texto.count('<link name="s') > 100
+    assert texto.count('<collision name="s') > 100

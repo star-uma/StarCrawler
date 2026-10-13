@@ -141,13 +141,70 @@ def terreno_sdf(mundo, carpeta: str) -> str:
             pose = _n((so.cx - grosor / 2 * nx / norma, so.cy - grosor / 2 * ny / norma,
                        zc - grosor / 2 * nz / norma, bal, -cab, so.rumbo))
         trozos.append(
-            '<link name="s%d"><pose>%s</pose>'
-            '<collision name="c"><geometry>%s</geometry>%s</collision>'
-            '<visual name="v"><geometry>%s</geometry>%s</visual></link>'
-            % (k, pose, geom, _rozamiento(1.0), geom, _material(*color)))
+            '<collision name="s%d"><pose>%s</pose><geometry>%s</geometry>%s</collision>'
+            % (k, pose, geom, _rozamiento(1.0)))
     if not trozos:
         return ''
-    return '<model name="terreno"><static>true</static>%s</model>' % ''.join(trozos)
+    # Un solo eslabon con todos los choques: cientos de cuerpos estaticos
+    # frenan a DART
+    return ('<model name="terreno"><static>true</static><link name="choques">%s</link>%s</model>'
+            % (''.join(trozos), vista_terreno(mundo, carpeta)))
+
+
+def vista_terreno(mundo, carpeta: str) -> str:
+    """Lo que se ve: los triangulos de mundo.visual() (los de la web) en
+    unas pocas mallas OBJ, una por color. Pintar cada solido aparte (cientos)
+    hace la ventana de Gazebo muy lenta en el WSL."""
+    grupos = {}
+    for pieza in mundo.visual():
+        if pieza['tipo'] != 'triangulos':
+            continue
+        pts, cols = pieza['puntos'], pieza['colores']
+        for k in range(0, len(pts) - 2, 3):
+            c = cols[k] if cols else pieza['color']
+            clave = tuple(round(v * 10) / 10 for v in c[:3])
+            grupos.setdefault(clave, []).append(pts[k:k + 3])
+    visuales = []
+    for n, (color, tris) in enumerate(sorted(grupos.items())):
+        ruta = os.path.join(carpeta, 'vista_%d.obj' % n)
+        with open(ruta, 'w', encoding='utf-8') as f:
+            for t in tris:
+                for v in t:
+                    f.write('v %.5f %.5f %.5f\n' % tuple(v))
+            for t in tris:
+                (ax, ay, az), (bx, by, bz), (cx, cy, cz) = t
+                ux, uy, uz = bx - ax, by - ay, bz - az
+                wx, wy, wz = cx - ax, cy - ay, cz - az
+                nx, ny, nz = uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx
+                m = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+                f.write('vn %.5f %.5f %.5f\n' % (nx / m, ny / m, nz / m))
+            for k in range(len(tris)):
+                a = 3 * k + 1
+                f.write('f %d//%d %d//%d %d//%d\n' % (a, k + 1, a + 1, k + 1, a + 2, k + 1))
+        visuales.append('<visual name="v%d"><geometry><mesh><uri>%s</uri></mesh></geometry>'
+                        '%s</visual>' % (n, ruta, _material(*color)))
+    return '<link name="vista">%s</link>' % ''.join(visuales) if visuales else ''
+
+
+def vista_brazo(s: float, o, w: float) -> str:
+    """Lo que se ve de un brazo: la banda negra (dos poleas y el tramo) y las
+    chapas amarillas a los dos lados. Los rodillos no se pintan."""
+    negro, amarillo = _material(0.08, 0.08, 0.08), _material(1.0, 0.82, 0.0)
+    cil = '<cylinder><radius>%g</radius><length>%g</length></cylinder>'
+    caja = '<box><size>%s</size></box>'
+    piezas = [((0, 0, 0, math.pi / 2, 0, 0), cil % (o.radio_polea, w), negro),
+              ((s * o.largo, 0, 0, math.pi / 2, 0, 0), cil % (o.radio_punta, w), negro),
+              ((s * o.largo / 2, 0, 0, 0, 0, 0),
+               caja % _n((o.largo, w, o.radio_polea + o.radio_punta)), negro)]
+    for lado in (1, -1):
+        y = lado * (w / 2 + 0.004)
+        piezas += [((s * o.largo / 2, y, 0, 0, 0, 0),
+                    caja % _n((o.largo, 0.006, 1.8 * o.radio_punta)), amarillo),
+                   ((0, y, 0, math.pi / 2, 0, 0), cil % (0.82 * o.radio_polea, 0.006), amarillo),
+                   ((s * o.largo, y, 0, math.pi / 2, 0, 0),
+                    cil % (0.9 * o.radio_punta, 0.006), amarillo)]
+    return ''.join('<visual name="v%d"><pose>%s</pose><geometry>%s</geometry>%s</visual>'
+                   % (k, _n(p), g, m) for k, (p, g, m) in enumerate(piezas))
 
 
 def robot_sdf(geo, x: float = 0.0, y: float = 0.0, rumbo: float = 0.0,
@@ -181,17 +238,14 @@ def robot_sdf(geo, x: float = 0.0, y: float = 0.0, rumbo: float = 0.0,
             '<link name="%s"><pose relative_to="base_link">%s</pose>'
             '<inertial><pose>%s</pose><mass>%g</mass><inertia><ixx>0.02</ixx><iyy>0.05</iyy>'
             '<izz>0.05</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>'
-            '<visual name="chapa"><pose>%s</pose><geometry><box><size>%s</size></box>'
-            '</geometry>%s</visual></link>'
+            '%s</link>'
             '<joint name="%s" type="revolute"><parent>base_link</parent><child>%s</child>'
             '<axis><xyz>0 %g 0</xyz><limit><lower>-1.6</lower><upper>1.6</upper>'
             '<effort>%g</effort><velocity>1</velocity></limit>'
             '<dynamics><damping>2</damping></dynamics></axis></joint>'
             % (eslabon, _n((px, py, 0, 0, 0, 0)), _n((s * o.largo / 2, 0, 0, 0, 0, 0)),
                max(geo.masa_brazo - 0.4, 0.1),
-               _n((s * o.largo / 2, (w / 2 + 0.004) * (1 if py > 0 else -1), 0, 0, 0, 0)),
-               _n((o.largo, 0.006, 1.8 * o.radio_punta)), _material(1.0, 0.82, 0.0),
-               junta, eslabon, -s, par_brazo))
+               vista_brazo(s, o, w), junta, eslabon, -s, par_brazo))
         for j, (rx, rz, r, tipo) in enumerate(lista):
             nombre = '%s_r%d' % (eslabon, j)
             partes.append(
@@ -199,15 +253,12 @@ def robot_sdf(geo, x: float = 0.0, y: float = 0.0, rumbo: float = 0.0,
                 '<inertial><mass>%g</mass><inertia><ixx>%g</ixx><iyy>%g</iyy><izz>%g</izz>'
                 '<ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>'
                 '<collision name="c"><pose>0 0 0 %g 0 0</pose><geometry>%s</geometry>%s'
-                '</collision>'
-                '<visual name="v"><pose>0 0 0 %g 0 0</pose><geometry>%s</geometry>%s</visual>'
-                '</link>'
+                '</collision></link>'
                 '<joint name="%s_j" type="revolute"><parent>%s</parent><child>%s</child>'
                 '<axis><xyz>0 1 0</xyz><limit><effort>%g</effort></limit></axis></joint>'
                 % (nombre, eslabon, _n((rx, 0, rz, 0, 0, 0)), m_rueda,
                    m_rueda * r * r / 2, m_rueda * r * r / 2, m_rueda * r * r / 2,
                    math.pi / 2, cil % (r, w), _rozamiento_rueda(rozamiento, rozamiento_lateral),
-                   math.pi / 2, cil % (r, w), _material(0.07, 0.07, 0.07),
                    nombre, eslabon, nombre, fuerza_banda * r))
             plugins.append(
                 '<plugin filename="ignition-gazebo-joint-controller-system" '
@@ -249,9 +300,12 @@ def mundo_sdf(mundo, geo, carpeta: str, x: float = 0.0, y: float = 0.0,
             '<plugin filename="ignition-gazebo-user-commands-system" '
             'name="ignition::gazebo::systems::UserCommands"/>'
             '<plugin filename="ignition-gazebo-scene-broadcaster-system" '
-            'name="ignition::gazebo::systems::SceneBroadcaster"/>'
+            'name="ignition::gazebo::systems::SceneBroadcaster">'
+            '<state_hertz>30</state_hertz></plugin>'
+            '<scene><ambient>0.55 0.55 0.55 1</ambient><background>0.78 0.84 0.9 1</background>'
+            '<shadows>false</shadows><grid>false</grid></scene>'
             '<plugin filename="ignition-gazebo-imu-system" name="ignition::gazebo::systems::Imu"/>'
-            '<light type="directional" name="sol"><cast_shadows>true</cast_shadows>'
+            '<light type="directional" name="sol"><cast_shadows>false</cast_shadows>'
             '<pose>0 0 10 0 0 0</pose><diffuse>0.9 0.9 0.9 1</diffuse>'
             '<direction>-0.4 0.2 -0.9</direction></light>'
             '<model name="suelo"><static>true</static><link name="l">'
