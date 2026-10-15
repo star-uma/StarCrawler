@@ -82,12 +82,16 @@ def lanzar_gazebo(contexto):
         get_package_share_directory('starcrawler_description'),
         'urdf', 'starcrawler.urdf.xacro')).toxml()
     mundo = valor('mundo') or 'llano'
-    ruta = sdf_core.generar(urdf, mundo, tempfile.mkdtemp(prefix='horu_gazebo_'))
+    carpeta = tempfile.mkdtemp(prefix='horu_gazebo_')
+    ruta = sdf_core.generar(urdf, mundo, carpeta)
     gui = valor('gz_gui').lower() in ('true', '1')
+    config = sdf_core.gui_config(carpeta) if gui else None
     return [
         # Ogre 1: el Ogre 2 de Fortress se cae en el WSL (GL3PlusTextureGpu)
         ExecuteProcess(cmd=['ign', 'gazebo', '-r', '--render-engine', 'ogre']
-                       + ([] if gui else ['-s']) + [ruta], output='screen'),
+                       + ([] if gui else ['-s'])
+                       + (['--gui-config', config] if config else []) + [ruta],
+                       output='screen'),
         Node(package='ros_gz_bridge', executable='parameter_bridge',
              name='puente_gazebo', arguments=sdf_core.puentes(),
              remappings=[(sdf_core.TOPICO_IMU, '/imu/data')], output='screen'),

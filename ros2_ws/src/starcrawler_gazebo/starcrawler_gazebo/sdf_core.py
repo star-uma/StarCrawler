@@ -328,3 +328,29 @@ def generar(urdf_xml: str, nombre_mundo: str, carpeta: str) -> str:
     with open(ruta, 'w', encoding='utf-8') as f:
         f.write(mundo_sdf(mundo, geo, carpeta))
     return ruta
+
+
+GUI_SISTEMA = '/usr/share/ignition/ignition-gazebo6/gui/gui.config'
+PANELES_FUERA = ('EntityContextMenuPlugin', 'SelectEntities', 'Spawn',
+                 'VisualizationCapabilities', 'Shapes', 'Lights', 'TransformControl',
+                 'Screenshot', 'CopyPaste', 'ComponentInspector', 'EntityTree',
+                 'MarkerManager')
+
+
+def gui_config(carpeta: str, origen: str = GUI_SISTEMA):
+    """La ventana de Gazebo sin los paneles que recorren todas las entidades
+    cada cuadro (arbol, inspector...): con los rodillos del robot se comen
+    varios nucleos. Devuelve la ruta, o None si no esta el de sistema."""
+    import re
+    if not os.path.exists(origen):
+        return None
+    with open(origen, encoding='utf-8') as f:
+        texto = f.read()
+    for nombre in PANELES_FUERA:
+        texto = re.sub(r'<plugin filename="%s".*?</plugin>\s*' % nombre, '', texto,
+                       flags=re.S)
+    ruta = os.path.join(carpeta, 'gui.config')
+    os.makedirs(carpeta, exist_ok=True)
+    with open(ruta, 'w', encoding='utf-8') as f:
+        f.write(texto)
+    return ruta
